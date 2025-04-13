@@ -2,6 +2,7 @@ fastapi
 kiteconnect
 pymysql
 python-dotenv
+pytz
+schedule
 sqlalchemy
 uvicorn
-schedule
