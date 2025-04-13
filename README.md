@@ -22,9 +22,7 @@ You're not lazy — you're *accountability-challenged*.
 
 - ⏱️ Daily DSA tracking with Leetcode integration (WIP)
 - 💸 Automatic stock purchase if you miss your daily goal
-- 📆 Scheduled background checks with `APScheduler`
 - 📧 Sarcastic shame email notifications for extra guilt
-- 🗄️ MySQL + SQLAlchemy for clean data handling
 - 📦 Easily self-hostable with Docker and FastAPI
 - 🔐 Kite Connect integration (Zerodha account required)
 
@@ -33,7 +31,6 @@ You're not lazy — you're *accountability-challenged*.
 ## 🛠️ Tech Stack
 
 - Python + FastAPI
-- APScheduler (for scheduled checks)
 - SQLAlchemy + MySQL
 - Zerodha Kite Connect API
 - Resend for emails (with ✨ maximum sarcasm)

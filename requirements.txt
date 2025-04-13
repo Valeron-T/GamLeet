@@ -1,7 +1,7 @@
-apscheduler
 fastapi
 kiteconnect
 pymysql
 python-dotenv
 sqlalchemy
 uvicorn
+schedule
