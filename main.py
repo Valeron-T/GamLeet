@@ -1,13 +1,15 @@
+from cryptography.fernet import Fernet
 from database import SessionLocal, Base, engine
+from datetime import datetime
+from dependencies import verify_api_key
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from kite import kite_connect, generate_session
+from models import Users # Models to be created in DB when API starts
 from scheduler import is_leetcode_solved_today, schedule_daily_check, check_dsa_completion
 from sqlalchemy.orm import Session
-from models import Users # Models to be created in DB when API starts
 import os
-from cryptography.fernet import Fernet
 
 load_dotenv()
 
@@ -31,6 +33,16 @@ except Exception as e:
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+secure_router = APIRouter(dependencies=[Depends(verify_api_key)])
+
 
 # Dependency for DB session
 def get_db():
@@ -50,35 +62,42 @@ def schedule_daily_check_with_db():
 
 schedule_daily_check_with_db()
 
-@app.get("/")
+@secure_router.get("/")
 async def root():
     return {"message": "Welcome to the DSA Enforcer App!"}
 
-@app.get("/login")
-async def login():
-    login_url = kite_connect.login_url()
-    return RedirectResponse(login_url)
+@secure_router.get("/login")
+async def login(db: Session = Depends(get_db)):
+    user = db.query(Users).filter(Users.zerodha_id == zerodha_id).first()
+    # If login was not done today, prompt relogin else use access token from DB.
+    if user.last_updated.date() < datetime.now().date():
+        login_url = kite_connect.login_url()
+        return {"url": login_url}
+    else:
+        return {"message": "already logged in"}
 
 @app.get("/login/callback")
 async def login_callback(request: Request, db: Session = Depends(get_db)):
     data = request.query_params
     request_token = data.get("request_token")
-    if request_token:
-        
+    if request_token:        
         access_token = generate_session(request_token)
         encrypted_token = cipher.encrypt(access_token.encode())
         user = db.query(Users).filter(Users.zerodha_id == zerodha_id).first()
         if user:
             user.access_token = encrypted_token
         else:
-            new_user = Users(zerodha_id=zerodha_id, access_token=access_token)
+            new_user = Users(zerodha_id=zerodha_id, access_token=encrypted_token)
             db.add(new_user)
         db.commit()
         return {"message": "Login successful!"}
     return {"message": "Login failed. No request token found."}
 
 
-@app.get("/test")
+@secure_router.get("/test")
 async def test(db: Session = Depends(get_db)):
     check_dsa_completion(db)
     # is_leetcode_solved_today()
+
+
+app.include_router(secure_router)
