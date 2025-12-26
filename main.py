@@ -4,14 +4,18 @@ from database import SessionLocal, Base, engine
 from datetime import datetime
 from dependencies import verify_api_key, lifespan
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from kite import kite_connect, generate_session
-from models import Users # Models to be created in DB when API starts
-from scheduler import is_leetcode_solved_today, schedule_daily_check, check_dsa_completion
+from models import User, UserStat  # Models to be created in DB when API starts
+from scheduler import (
+    is_leetcode_solved_today,
+    schedule_daily_check,
+    check_dsa_completion,
+)
 from sqlalchemy.orm import Session
 from leetcode.load_questions import leetcode_data_router
-from routes import daily
+from routes import daily, user
 from contextlib import asynccontextmanager
 import os
 
@@ -45,8 +49,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-secure_router = APIRouter(dependencies=[Depends(verify_api_key)])
-
 
 # Dependency for DB session
 def get_db():
@@ -56,6 +58,7 @@ def get_db():
     finally:
         db.close()
 
+
 # Schedule the daily check at 11:59 PM with a DB connection
 def schedule_daily_check_with_db():
     db = SessionLocal()
@@ -64,46 +67,80 @@ def schedule_daily_check_with_db():
     finally:
         db.close()
 
+
 schedule_daily_check_with_db()
+
+secure_router = APIRouter(
+    prefix="/auth",
+    dependencies=[Depends(verify_api_key)],
+    tags=["Auth"],
+)
+
 
 @secure_router.get("/")
 async def root():
     return {"message": "Welcome to the DSA Enforcer App!"}
 
+
 @secure_router.get("/login")
-async def login(db: Session = Depends(get_db)):
-    """Intiate Zerodha Login flow
+def start_zerodha_login():
+    return {
+        "status": "AUTH_REQUIRED",
+        "url": kite_connect.login_url(),
+    }
 
-    Args:
-        db (Session, optional): _description_. Defaults to Depends(get_db).
 
-    Returns:
-        _type_: _description_
-    """
-    user = db.query(Users).filter(Users.zerodha_id == zerodha_id).first()
-    # If login was not done today, prompt relogin else use access token from DB.
-    if user.last_updated.date() < datetime.now().date():
-        login_url = kite_connect.login_url()
-        return {"url": login_url, "status": "AUTH_REQUIRED"}
+@app.get("/auth/callback")
+async def zerodha_callback(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    request_token = request.query_params.get("request_token")
+    if not request_token:
+        raise HTTPException(400, "Missing request token")
+
+    session = generate_session(request_token)
+    encrypted_token = cipher.encrypt(session["access_token"].encode())
+
+    # Single-tenant: only one user
+    user = db.query(User).first()
+
+    if not user:
+        user = User(
+            zerodha_id=session["user_id"],
+            access_token=encrypted_token,
+        )
+        db.add(user)
+        db.flush()  # ensures user.id is available
     else:
-        return {"status": "LOGGED_IN"}
+        user.access_token = encrypted_token
 
-@app.get("/login/callback")
-async def login_callback(request: Request, db: Session = Depends(get_db)):
-    data = request.query_params
-    request_token = data.get("request_token")
-    if request_token:        
-        access_token = generate_session(request_token)
-        encrypted_token = cipher.encrypt(access_token.encode())
-        user = db.query(Users).filter(Users.zerodha_id == zerodha_id).first()
-        if user:
-            user.access_token = encrypted_token
-        else:
-            new_user = Users(zerodha_id=zerodha_id, access_token=encrypted_token)
-            db.add(new_user)
-        db.commit()
-        return RedirectResponse("http://localhost:5173/dashboard")
-    return {"message": "Login failed. No request token found."}
+    user.last_updated = datetime.utcnow()
+
+    # ✅ Create stats if missing
+    stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
+
+    if not stats:
+        stats = UserStat(user_id=user.id)
+        db.add(stats)
+
+    db.commit()
+
+    response = RedirectResponse(
+        "http://localhost:5173/dashboard",
+        status_code=302,
+    )
+
+    response.set_cookie(
+        key="user_id",
+        value=str(user.public_id),
+        httponly=True,
+        secure=False,  # True in prod
+        samesite="lax",
+        max_age=60 * 60 * 24,
+    )
+
+    return response
 
 
 @secure_router.get("/test")
@@ -115,3 +152,4 @@ async def test(db: Session = Depends(get_db)):
 app.include_router(secure_router)
 app.include_router(leetcode_data_router, prefix="/leetcode")
 app.include_router(daily.router)
+app.include_router(user.router)

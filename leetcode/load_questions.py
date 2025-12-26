@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 from dependencies import verify_api_key
-from models import Questions
+from models import Question
 
 cookies = {
     "csrftoken": "bBwUtHX4wvL8DGhoYXdm370e963x5dnuIFCe8BtZkUilabCRppeT9U04oPHuw0Ig",
@@ -165,7 +165,7 @@ async def load_leetcode_questions(db: Session = Depends(get_db)):
 
          # Build insert statement
         existing_ids = {
-            q.id for q in db.query(Questions.id).all()
+            q.id for q in db.query(Question.id).all()
         }
 
         new_objs = []
@@ -180,10 +180,10 @@ async def load_leetcode_questions(db: Session = Depends(get_db)):
             }
 
             if q["id"] in existing_ids:
-                db.query(Questions).filter_by(id=q["id"]).update(q_data)
+                db.query(Question).filter_by(id=q["id"]).update(q_data)
             else:
                 q_data["id"] = q["id"]
-                new_objs.append(Questions(**q_data))
+                new_objs.append(Question(**q_data))
 
         if new_objs:
             db.bulk_save_objects(new_objs)

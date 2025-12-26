@@ -4,7 +4,7 @@ import random
 import json
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from models import Questions
+from models import Question
 from database import get_db
 from dependencies import get_redis_client
 import redis.asyncio as redis
@@ -39,7 +39,7 @@ async def get_daily_questions(
 
     for diff in difficulties:
         # Fetch all IDs of this difficulty once
-        ids = [row[0] for row in db.query(Questions.id).filter(Questions.difficulty == diff).all()]
+        ids = [row[0] for row in db.query(Question.id).filter(Question.difficulty == diff).all()]
         if not ids:
             result[diff.lower()] = None
             continue
@@ -47,15 +47,15 @@ async def get_daily_questions(
         random_id = random.choice(ids)
         question = (
             db.query(
-                Questions.id,
-                Questions.title,
-                Questions.slug,
-                Questions.acc_rate,
-                Questions.paid_only,
-                Questions.difficulty,
-                Questions.topics,
+                Question.id,
+                Question.title,
+                Question.slug,
+                Question.acc_rate,
+                Question.paid_only,
+                Question.difficulty,
+                Question.topics,
             )
-            .filter(Questions.id == random_id)
+            .filter(Question.id == random_id)
             .first()
         )
 

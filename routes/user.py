@@ -1,21 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Dict
 
-from ..database import get_db  # Adjust import as needed
-from ..models import User  # Adjust import as needed
+from database import get_db
+from dependencies import get_current_user
+from models import UserStat
+from schemas.user_stats import UserStatsResponse
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/user", tags=["User"])
 
-@router.get("/{user_id}/stats", response_model=Dict[str, int])
-def get_user_stats(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    # Example stats, adjust according to your User model
-    stats = {
-        "games_played": user.games_played,
-        "games_won": user.games_won,
-        "score": user.score
-    }
+@router.get("/stats", response_model=UserStatsResponse)
+def get_user_stats(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    stats = (
+        db.query(UserStat)
+        .filter(UserStat.user_id == user.id)
+        .first()
+    )
+
+    if not stats:
+        raise HTTPException(status_code=404, detail="User stats not found")
+
     return stats

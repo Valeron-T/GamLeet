@@ -1,10 +1,10 @@
 from database import Base
-from sqlalchemy import CHAR, Column, Integer, DateTime, VARCHAR, TEXT
+from sqlalchemy import CHAR, DECIMAL, Column, Date, Integer, DateTime, VARCHAR, TEXT
 from sqlalchemy.sql import func
 import uuid
 
 
-class Users(Base):
+class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -16,7 +16,7 @@ class Users(Base):
     last_updated = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
-class Questions(Base):
+class Question(Base):
     __tablename__ = "questions"
 
     id = Column(Integer, primary_key=True, nullable=False)
@@ -28,3 +28,34 @@ class Questions(Base):
     paid_only = Column(Integer, default=0)  # Using Integer to represent tinyint
     title = Column(VARCHAR(100), nullable=False)
     difficulty = Column(VARCHAR(100), nullable=False)
+
+
+class UserStat(Base):
+    __tablename__ = "user_stats"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, unique=True, nullable=False, index=True)
+
+    lifetime_loss = Column(DECIMAL(12, 2), default=0.00, nullable=False)
+    available_balance = Column(DECIMAL(12, 2), default=0.00, nullable=False)
+
+    current_streak = Column(Integer, default=0, nullable=False)
+    max_streak = Column(Integer, default=0, nullable=False)
+
+    problems_solved = Column(Integer, default=0, nullable=False)
+    gamcoins = Column(Integer, default=0, nullable=False)
+    total_xp = Column(Integer, default=0, nullable=False)
+
+
+
+    last_activity_date = Column(Date, nullable=True)
+
+    created_at = Column(
+        DateTime,
+        server_default=func.current_timestamp()
+    )
+    updated_at = Column(
+        DateTime,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp()
+    )

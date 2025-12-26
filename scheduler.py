@@ -6,7 +6,7 @@ from helpers.mails import build_penalty_email
 from kite import kite_connect, generate_session
 from kiteconnect.exceptions import InputException
 from sqlalchemy.orm import Session
-from models import Users
+from models import User
 from datetime import datetime
 import pytz
 import os
@@ -26,7 +26,7 @@ def check_dsa_completion(db: Session):
 
     if not kite_connect.access_token:
         user = (
-            db.query(Users).filter(Users.zerodha_id == os.getenv("ZERODHA_ID")).first()
+            db.query(User).filter(User.zerodha_id == os.getenv("ZERODHA_ID")).first()
         )
         decrypted_access_token = cipher.decrypt(user.access_token).decode()
         kite_connect.set_access_token(decrypted_access_token)
