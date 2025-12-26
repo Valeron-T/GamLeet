@@ -123,7 +123,7 @@ SARCASTIC_EMAILS = [
 def build_penalty_email():
     msg = random.choice(SARCASTIC_EMAILS)
     return {
-        "from": "gameleet@alerts.valeron.me",
+        "from": "gamleet@alerts.valeron.me",
         "to": "valerontoscano@gmail.com",
         "subject": msg["subject"],
         "html": f"""

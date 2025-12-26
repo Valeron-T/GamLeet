@@ -1,7 +1,8 @@
 from cryptography.fernet import Fernet
+from fastapi.responses import RedirectResponse
 from database import SessionLocal, Base, engine
 from datetime import datetime
-from dependencies import verify_api_key
+from dependencies import verify_api_key, lifespan
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +10,9 @@ from kite import kite_connect, generate_session
 from models import Users # Models to be created in DB when API starts
 from scheduler import is_leetcode_solved_today, schedule_daily_check, check_dsa_completion
 from sqlalchemy.orm import Session
+from leetcode.load_questions import leetcode_data_router
+from routes import daily
+from contextlib import asynccontextmanager
 import os
 
 load_dotenv()
@@ -31,7 +35,7 @@ try:
 except Exception as e:
     print(f"Error creating database tables: {e}")
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,13 +72,21 @@ async def root():
 
 @secure_router.get("/login")
 async def login(db: Session = Depends(get_db)):
+    """Intiate Zerodha Login flow
+
+    Args:
+        db (Session, optional): _description_. Defaults to Depends(get_db).
+
+    Returns:
+        _type_: _description_
+    """
     user = db.query(Users).filter(Users.zerodha_id == zerodha_id).first()
     # If login was not done today, prompt relogin else use access token from DB.
     if user.last_updated.date() < datetime.now().date():
         login_url = kite_connect.login_url()
-        return {"url": login_url}
+        return {"url": login_url, "status": "AUTH_REQUIRED"}
     else:
-        return {"message": "already logged in"}
+        return {"status": "LOGGED_IN"}
 
 @app.get("/login/callback")
 async def login_callback(request: Request, db: Session = Depends(get_db)):
@@ -90,7 +102,7 @@ async def login_callback(request: Request, db: Session = Depends(get_db)):
             new_user = Users(zerodha_id=zerodha_id, access_token=encrypted_token)
             db.add(new_user)
         db.commit()
-        return {"message": "Login successful!"}
+        return RedirectResponse("http://localhost:5173/dashboard")
     return {"message": "Login failed. No request token found."}
 
 
@@ -101,3 +113,5 @@ async def test(db: Session = Depends(get_db)):
 
 
 app.include_router(secure_router)
+app.include_router(leetcode_data_router, prefix="/leetcode")
+app.include_router(daily.router)

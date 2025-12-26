@@ -3,6 +3,7 @@ kiteconnect
 pymysql
 python-dotenv
 pytz
+redis
 resend
 schedule
 sqlalchemy
