@@ -9,8 +9,17 @@ class UserStatsResponse(BaseModel):
     current_streak: int
     max_streak: int
     problems_solved: int
+    problems_since_last_life: int
+    lives: int
+    difficulty_mode: str
+    powerups_used_today: int
     gamcoins: int
     total_xp: int
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+class DifficultyUpdateRequest(BaseModel):
+    difficulty_mode: str
 
 
     last_activity_date: Optional[date]

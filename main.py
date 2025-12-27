@@ -26,13 +26,7 @@ if not zerodha_id:
     print("Zerodha id not found!")
     exit(-1)
 
-# Generate a key and store it securely (do this once and reuse the key)
-encryption_key = os.getenv("ENCRYPTION_KEY")
-if not encryption_key:
-    print("Encryption key not found!")
-    exit(-1)
-
-cipher = Fernet(encryption_key)
+from security import encrypt_token, decrypt_token
 # Ensure DB tables are created
 try:
     Base.metadata.create_all(bind=engine)
@@ -100,7 +94,7 @@ async def zerodha_callback(
         raise HTTPException(400, "Missing request token")
 
     session = generate_session(request_token)
-    encrypted_token = cipher.encrypt(session["access_token"].encode())
+    encrypted_token = encrypt_token(session["access_token"])
 
     # Single-tenant: only one user
     user = db.query(User).first()
@@ -109,6 +103,8 @@ async def zerodha_callback(
         user = User(
             zerodha_id=session["user_id"],
             access_token=encrypted_token,
+            name=session["user_name"],
+            email=session["email"],
         )
         db.add(user)
         db.flush()  # ensures user.id is available

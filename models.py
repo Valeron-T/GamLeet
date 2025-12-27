@@ -14,6 +14,8 @@ class User(Base):
     zerodha_id = Column(VARCHAR(10), unique=True, nullable=True)
     access_token = Column(TEXT, nullable=True)
     last_updated = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    name = Column(VARCHAR(255), unique=True, nullable=True)
+    email = Column(VARCHAR(100), unique=True, nullable=True)
 
 
 class Question(Base):
@@ -43,6 +45,10 @@ class UserStat(Base):
     max_streak = Column(Integer, default=0, nullable=False)
 
     problems_solved = Column(Integer, default=0, nullable=False)
+    problems_since_last_life = Column(Integer, default=0, nullable=False)
+    lives = Column(Integer, default=3, nullable=False)
+    difficulty_mode = Column(VARCHAR(20), default="normal", nullable=False)
+    powerups_used_today = Column(Integer, default=0, nullable=False)
     gamcoins = Column(Integer, default=0, nullable=False)
     total_xp = Column(Integer, default=0, nullable=False)
 
