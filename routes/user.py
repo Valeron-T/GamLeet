@@ -9,13 +9,41 @@ from schemas.user_stats import UserStatsResponse, DifficultyUpdateRequest
 from kite import kite_connect
 from security import decrypt_token
 from scheduler import check_dsa_completion
+from dependencies import get_redis_client 
+import json
 
 router = APIRouter(prefix="/user", tags=["User"])
 
+async def fetch_and_cache_margins(user, redis):
+    cache_key = f"user:{user.id}:margins"
+    
+    # Check cache
+    cached = await redis.get(cache_key)
+    if cached:
+        return json.loads(cached)
+    
+    # Fetch from Zerodha if access token exists
+    if not user.access_token:
+        return {"equity": {"available": {"live_balance": 0}}}
+        
+    try:
+        from kite import kite_connect
+        access_token = decrypt_token(user.access_token)
+        kite_connect.set_access_token(access_token)
+        margins = kite_connect.margins()
+        
+        # Cache for 1 hour
+        await redis.set(cache_key, json.dumps(margins), ex=3600)
+        return margins
+    except Exception as e:
+        print(f"Error fetching margins: {e}")
+        return {"equity": {"available": {"live_balance": 0}}}
+
 @router.post("/sync", response_model=UserStatsResponse)
-def sync_user_progress(
+async def sync_user_progress(
     user = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis = Depends(get_redis_client),
 ):
     check_dsa_completion(db)
     stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
@@ -33,13 +61,38 @@ def sync_user_progress(
         stats.name = "User"
     stats.email = user.email
 
+    # Inject real-time balance
+    margins = await fetch_and_cache_margins(user, redis)
+    stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+
     return stats
 
+@router.post("/disconnect-zerodha")
+async def disconnect_zerodha(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    redis = Depends(get_redis_client),
+):
+    user.access_token = None
+    user.zerodha_id = None
+    
+    # Clear cache
+    await redis.delete(f"user:{user.id}:margins")
+    
+    stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
+    if stats:
+        stats.lives = 3 
+        stats.difficulty_mode = "normal"
+    
+    db.commit()
+    return {"message": "Zerodha account disconnected successfully"}
+
 @router.post("/difficulty", response_model=UserStatsResponse)
-def update_difficulty(
+async def update_difficulty(
     request: DifficultyUpdateRequest,
     user = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis = Depends(get_redis_client),
 ):
     stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
     if not stats:
@@ -60,12 +113,25 @@ def update_difficulty(
         stats.lives = 0 # Lives don't matter in sandbox, no buffer in god mode
     
     db.commit()
+
+    # Populate response fields
+    if user.name:
+        parts = user.name.split()
+        stats.name = f"{parts[0]} {parts[-1]}" if len(parts) > 2 else user.name
+    else:
+        stats.name = "User"
+    stats.email = user.email
+    
+    margins = await fetch_and_cache_margins(user, redis)
+    stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+
     return stats
 
 @router.post("/use-powerup", response_model=UserStatsResponse)
-def use_powerup(
+async def use_powerup(
     user = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis = Depends(get_redis_client),
 ):
     stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
     if not stats:
@@ -84,12 +150,25 @@ def use_powerup(
     # For now, let's just increment the counter
     stats.powerups_used_today += 1
     db.commit()
+
+    # Populate response fields
+    if user.name:
+        parts = user.name.split()
+        stats.name = f"{parts[0]} {parts[-1]}" if len(parts) > 2 else user.name
+    else:
+        stats.name = "User"
+    stats.email = user.email
+    
+    margins = await fetch_and_cache_margins(user, redis)
+    stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+
     return stats
 
 @router.get("/stats", response_model=UserStatsResponse)
-def get_user_stats(
+async def get_user_stats(
     user = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis = Depends(get_redis_client),
 ):
     stats = (
         db.query(UserStat)
@@ -99,7 +178,7 @@ def get_user_stats(
 
     if not stats:
         raise HTTPException(status_code=404, detail="User stats not found")
-
+    
     if user.name:
         parts = user.name.split()
         if len(parts) > 2:
@@ -111,29 +190,22 @@ def get_user_stats(
     
     stats.email = user.email
 
+    # Inject real-time balance from Redis/Zerodha
+    if user.access_token:
+        margins = await fetch_and_cache_margins(user, redis)
+        stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+    else:
+        stats.available_balance = 0
+
     return stats
 
 @router.get("/margins")
-def get_user_margins(
+async def get_user_margins(
     user = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    redis = Depends(get_redis_client),
 ):
     if not user.access_token:
-        raise HTTPException(status_code=400, detail="Zerodha account not linked")
+        # Return properly structured empty response for UI to handle gracefully
+        return {"equity": {"available": {"live_balance": 0}}}
     
-    try:
-        access_token = decrypt_token(user.access_token)
-        kite_connect.set_access_token(access_token)
-        margins = kite_connect.margins()
-        
-        # Sync with database stats
-        equity_margin = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
-        from models import UserStat
-        stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
-        if stats:
-            stats.available_balance = equity_margin
-            db.commit()
-            
-        return margins
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch margins: {str(e)}")
+    return await fetch_and_cache_margins(user, redis)

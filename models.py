@@ -39,7 +39,6 @@ class UserStat(Base):
     user_id = Column(Integer, unique=True, nullable=False, index=True)
 
     lifetime_loss = Column(DECIMAL(12, 2), default=0.00, nullable=False)
-    available_balance = Column(DECIMAL(12, 2), default=0.00, nullable=False)
 
     current_streak = Column(Integer, default=0, nullable=False)
     max_streak = Column(Integer, default=0, nullable=False)

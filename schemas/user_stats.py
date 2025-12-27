@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 class UserStatsResponse(BaseModel):
@@ -17,12 +17,10 @@ class UserStatsResponse(BaseModel):
     total_xp: int
     name: Optional[str] = None
     email: Optional[str] = None
-
-class DifficultyUpdateRequest(BaseModel):
-    difficulty_mode: str
-
-
-    last_activity_date: Optional[date]
+    last_activity_date: Optional[date] = None
 
     class Config:
         orm_mode = True
+
+class DifficultyUpdateRequest(BaseModel):
+    difficulty_mode: str
