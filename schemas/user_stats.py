@@ -17,6 +17,8 @@ class UserStatsResponse(BaseModel):
     total_xp: int
     name: Optional[str] = None
     email: Optional[str] = None
+    leetcode_connected: bool = False
+    leetcode_username: Optional[str] = None
     last_activity_date: Optional[date] = None
 
     class Config:

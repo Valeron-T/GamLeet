@@ -16,6 +16,8 @@ class User(Base):
     last_updated = Column(DateTime, server_default=func.now(), onupdate=func.now())
     name = Column(VARCHAR(255), unique=True, nullable=True)
     email = Column(VARCHAR(100), unique=True, nullable=True)
+    leetcode_username = Column(VARCHAR(100), nullable=True)
+    leetcode_session = Column(TEXT, nullable=True)
 
 
 class Question(Base):
@@ -64,3 +66,21 @@ class UserStat(Base):
         server_default=func.current_timestamp(),
         onupdate=func.current_timestamp()
     )
+
+class UserInventory(Base):
+    __tablename__ = "user_inventory"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    item_id = Column(VARCHAR(50), nullable=False)  # e.g., "streak-freeze", "penalty-shield"
+    quantity = Column(Integer, default=1, nullable=False)
+    acquired_at = Column(DateTime, server_default=func.current_timestamp())
+
+
+class UserAchievement(Base):
+    __tablename__ = "user_achievements"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    achievement_id = Column(VARCHAR(50), nullable=False)  # e.g., "first-blood", "week-warrior"
+    unlocked_at = Column(DateTime, server_default=func.current_timestamp())

@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from dependencies import get_current_user
-from models import UserStat
+from dependencies import get_redis_client, get_current_user
+from models import UserStat, UserInventory, UserAchievement, Question
 from schemas.user_stats import UserStatsResponse, DifficultyUpdateRequest
+from schemas.inventory import InventoryResponse, InventoryItem, AchievementsResponse, Achievement
+from schemas.user_leetcode import LeetCodeUpdate
 
 from kite import kite_connect
 from security import decrypt_token
@@ -64,6 +66,8 @@ async def sync_user_progress(
     # Inject real-time balance
     margins = await fetch_and_cache_margins(user, redis)
     stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+    stats.leetcode_connected = bool(user.leetcode_session)
+    stats.leetcode_username = user.leetcode_username
 
     return stats
 
@@ -86,6 +90,17 @@ async def disconnect_zerodha(
     
     db.commit()
     return {"message": "Zerodha account disconnected successfully"}
+
+@router.post("/leetcode")
+async def update_leetcode_credentials(
+    request: LeetCodeUpdate,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user.leetcode_username = request.username
+    user.leetcode_session = request.session
+    db.commit()
+    return {"message": "LeetCode credentials updated successfully"}
 
 @router.post("/difficulty", response_model=UserStatsResponse)
 async def update_difficulty(
@@ -124,6 +139,8 @@ async def update_difficulty(
     
     margins = await fetch_and_cache_margins(user, redis)
     stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+    stats.leetcode_connected = bool(user.leetcode_session)
+    stats.leetcode_username = user.leetcode_username
 
     return stats
 
@@ -161,6 +178,8 @@ async def use_powerup(
     
     margins = await fetch_and_cache_margins(user, redis)
     stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+    stats.leetcode_connected = bool(user.leetcode_session)
+    stats.leetcode_username = user.leetcode_username
 
     return stats
 
@@ -196,6 +215,9 @@ async def get_user_stats(
         stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
     else:
         stats.available_balance = 0
+    
+    stats.leetcode_connected = bool(user.leetcode_session)
+    stats.leetcode_username = user.leetcode_username
 
     return stats
 
@@ -209,3 +231,70 @@ async def get_user_margins(
         return {"equity": {"available": {"live_balance": 0}}}
     
     return await fetch_and_cache_margins(user, redis)
+
+
+# Achievement definitions
+ACHIEVEMENTS = [
+    {"id": "first-blood", "name": "First Blood", "description": "Solve your first problem", "icon": "🎯", "rarity": "common", "check": lambda s: s.problems_solved >= 1},
+    {"id": "week-warrior", "name": "Week Warrior", "description": "Maintain a 7-day streak", "icon": "🔥", "rarity": "rare", "check": lambda s: s.max_streak >= 7},
+    {"id": "month-master", "name": "Month Master", "description": "Maintain a 30-day streak", "icon": "👑", "rarity": "epic", "check": lambda s: s.max_streak >= 30},
+    {"id": "century-club", "name": "Century Club", "description": "Solve 100 problems", "icon": "💯", "rarity": "epic", "check": lambda s: s.problems_solved >= 100},
+    {"id": "diamond-hands", "name": "Diamond Hands", "description": "Never trigger a penalty", "icon": "💎", "rarity": "legendary", "check": lambda s: s.lifetime_loss == 0 and s.problems_solved >= 10},
+    {"id": "survivor", "name": "Survivor", "description": "Recover from 0 lives", "icon": "🛡️", "rarity": "rare", "check": lambda s: s.lives > 0 and s.problems_since_last_life > 0},
+    {"id": "grinder", "name": "Grinder", "description": "Solve 50 problems", "icon": "⚡", "rarity": "rare", "check": lambda s: s.problems_solved >= 50},
+    {"id": "dedicated", "name": "Dedicated", "description": "Solve 10 problems", "icon": "📚", "rarity": "common", "check": lambda s: s.problems_solved >= 10},
+]
+
+
+@router.get("/inventory", response_model=InventoryResponse)
+def get_user_inventory(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    inventory_items = db.query(UserInventory).filter(UserInventory.user_id == user.id).all()
+    
+    items = [
+        InventoryItem(
+            item_id=item.item_id,
+            quantity=item.quantity,
+            acquired_at=item.acquired_at
+        )
+        for item in inventory_items
+    ]
+    
+    return InventoryResponse(items=items)
+
+
+@router.get("/achievements", response_model=AchievementsResponse)
+def get_user_achievements(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
+    unlocked_achievements = db.query(UserAchievement).filter(UserAchievement.user_id == user.id).all()
+    unlocked_ids = {a.achievement_id: a.unlocked_at for a in unlocked_achievements}
+    
+    achievements = []
+    for ach_def in ACHIEVEMENTS:
+        is_unlocked = ach_def["id"] in unlocked_ids
+        
+        # Check if newly unlocked
+        if stats and not is_unlocked and ach_def["check"](stats):
+            # Unlock achievement
+            new_ach = UserAchievement(user_id=user.id, achievement_id=ach_def["id"])
+            db.add(new_ach)
+            db.commit()
+            is_unlocked = True
+            unlocked_ids[ach_def["id"]] = new_ach.unlocked_at
+        
+        achievements.append(Achievement(
+            id=ach_def["id"],
+            name=ach_def["name"],
+            description=ach_def["description"],
+            icon=ach_def["icon"],
+            rarity=ach_def["rarity"],
+            unlocked=is_unlocked,
+            unlocked_at=unlocked_ids.get(ach_def["id"])
+        ))
+    
+    return AchievementsResponse(achievements=achievements)

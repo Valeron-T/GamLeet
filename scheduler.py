@@ -16,10 +16,11 @@ from models import User, UserStat
 resend.api_key = os.getenv("RESEND_API_KEY")
 
 def check_dsa_completion(db: Session):
-    dsa_solved = is_leetcode_solved_today()
     user = db.query(User).first() # Single-tenant
     if not user:
         return
+        
+    dsa_solved = is_leetcode_solved_today(username=user.leetcode_username, session=user.leetcode_session)
         
     stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
     if not stats:

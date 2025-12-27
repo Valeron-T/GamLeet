@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from models import Question
 from database import get_db
-from dependencies import get_redis_client
+from dependencies import get_redis_client, get_current_user
 import redis.asyncio as redis
 
 router = APIRouter()
@@ -19,17 +19,11 @@ def json_safe(obj):
 
 @router.get("/daily-questions")
 async def get_daily_questions(
+    user = Depends(get_current_user),
     db: Session = Depends(get_db),
     redis: redis.Redis = Depends(get_redis_client),
 ):
     today = datetime.date.today().isoformat()
-    cache_key = f"daily_questions:{today}"
-
-    # Try cache first
-    cached = await redis.get(cache_key)
-    if cached:
-        return json.loads(cached)
-
     # Deterministic randomness (same per day)
     seed = int(today.replace("-", ""))
     random.seed(seed)
@@ -71,11 +65,13 @@ async def get_daily_questions(
 
     response = {"date": today, "problems": result}
 
-    # Cache for 24h
-    now = datetime.datetime.now()
-    midnight = datetime.datetime.combine(now.date() + datetime.timedelta(days=1), datetime.time.min)
-    seconds_until_midnight = int((midnight - now).total_seconds())
-    
-    await redis.setex(cache_key, seconds_until_midnight, json.dumps(response))
+    # Dynamic status check (not cached globally)
+    from helpers.leetcode import get_problems_status
+    slugs = [p["slug"] for p in result.values() if p and "slug" in p]
+    if slugs:
+        status_map = get_problems_status(slugs, username=user.leetcode_username, session=user.leetcode_session)
+        for key in result:
+            if result[key] and "slug" in result[key]:
+                result[key]["status"] = status_map.get(result[key]["slug"], "unattempted")
 
     return response
