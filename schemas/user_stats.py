@@ -19,6 +19,7 @@ class UserStatsResponse(BaseModel):
     email: Optional[str] = None
     leetcode_connected: bool = False
     leetcode_username: Optional[str] = None
+    allow_paid: int = 0
     last_activity_date: Optional[date] = None
 
     class Config:

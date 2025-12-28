@@ -18,6 +18,7 @@ class User(Base):
     email = Column(VARCHAR(100), unique=True, nullable=True)
     leetcode_username = Column(VARCHAR(100), nullable=True)
     leetcode_session = Column(TEXT, nullable=True)
+    allow_paid = Column(Integer, default=0) # 0 = No, 1 = Yes
 
 
 class Question(Base):
@@ -84,3 +85,13 @@ class UserAchievement(Base):
     user_id = Column(Integer, nullable=False, index=True)
     achievement_id = Column(VARCHAR(50), nullable=False)  # e.g., "first-blood", "week-warrior"
     unlocked_at = Column(DateTime, server_default=func.current_timestamp())
+
+
+class QuestionCompletion(Base):
+    __tablename__ = "question_completions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    question_id = Column(Integer, nullable=False, index=True)
+    rewarded_at = Column(DateTime, server_default=func.current_timestamp())
+

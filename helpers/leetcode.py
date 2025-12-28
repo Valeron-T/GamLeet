@@ -2,7 +2,9 @@ from datetime import datetime
 import os
 import pytz
 import requests
+import httpx
 import uuid
+import json
 
 
 def is_leetcode_solved_today(username: str = None, session: str = None):
@@ -41,10 +43,15 @@ def is_leetcode_solved_today(username: str = None, session: str = None):
         "operationName": "recentAcSubmissions",
     }
 
-    response = requests.post(
-        "https://leetcode.com/graphql/", headers=headers, json=json_data, cookies=cookies
-    )
-    data = response.json().get("data", {})
+    try:
+        response = requests.post(
+            "https://leetcode.com/graphql/", headers=headers, json=json_data, cookies=cookies,
+            timeout=15
+        )
+        data = response.json().get("data", {})
+    except Exception as e:
+        print(f"Error checking if LeetCode solved today: {e}")
+        return False
     if not data or not data.get("recentAcSubmissionList"):
         return False
         
@@ -94,10 +101,96 @@ def get_problems_status(slugs: list[str], username: str = None, session: str = N
     }
 
     try:
-        response = requests.post("https://leetcode.com/graphql/", headers=headers, json=json_data, cookies=cookies)
+        response = requests.post(
+            "https://leetcode.com/graphql/", headers=headers, json=json_data, cookies=cookies,
+            timeout=15
+        )
         data = response.json().get("data", {}).get("recentSubmissionList", [])
     except Exception as e:
         print(f"Error fetching LeetCode status: {e}")
+        return {slug: "unattempted" for slug in slugs}
+
+    # Evaluation time (3:30 PM today or yesterday)
+    tz = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(tz)
+    eval_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    
+    if now < eval_time:
+        # If it's before 3:30 PM, the "day" started at 3:30 PM yesterday
+        from datetime import timedelta
+        eval_time = eval_time - timedelta(days=1)
+    
+    eval_timestamp = int(eval_time.timestamp())
+
+    status_map = {slug: "unattempted" for slug in slugs}
+    for sub in data:
+        slug = sub["titleSlug"]
+        if slug in status_map:
+            sub_ts = int(sub["timestamp"])
+            
+            # Only count submissions after the last curation/evaluation reset
+            if sub_ts >= eval_timestamp:
+                if sub["statusDisplay"] == "Accepted":
+                    status_map[slug] = "completed"
+                elif status_map[slug] != "completed":
+                    status_map[slug] = "attempted"
+    return status_map
+
+
+async def get_problems_status_async(slugs: list[str], username: str = None, session: str = None):
+    username = username or os.getenv("LEETCODE_USERNAME")
+    if not username:
+        return {slug: "unattempted" for slug in slugs}
+
+    headers = {
+        "accept": "*/*",
+        "content-type": "application/json",
+        "origin": "https://leetcode.com",
+        "referer": f"https://leetcode.com/u/{username}/",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    }
+
+    cookies = {}
+    if session:
+        cookies["LEETCODE_SESSION"] = session
+
+    # Fetch recent submissions (both AC and non-AC)
+    json_data = {
+        "query": """
+        query recentSubmissions($username: String!, $limit: Int!) {
+            recentSubmissionList(username: $username, limit: $limit) {
+                titleSlug
+                statusDisplay
+                timestamp
+            }
+        }
+        """,
+        "variables": {
+            "username": username,
+            "limit": 30,
+        },
+        "operationName": "recentSubmissions",
+    }
+
+    try:
+        # Set a generous timeout for the async client
+        timeout = httpx.Timeout(30.0, read=30.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            # httpx uses 'cookies' as a Cookies object or dict, similar to requests
+            # But let's verify if 'cookies' contains None or empty values
+            response = await client.post(
+                "https://leetcode.com/graphql/", 
+                headers=headers, 
+                json=json_data, 
+                cookies={k: v for k, v in cookies.items() if v is not None}
+            )
+            data = response.json().get("data", {}).get("recentSubmissionList", [])
+            if data is None:
+                data = []
+    except Exception as e:
+        import traceback
+        print(f"Error fetching LeetCode status async: {e}")
+        traceback.print_exc()
         return {slug: "unattempted" for slug in slugs}
 
     # Evaluation time (3:30 PM today or yesterday)
@@ -154,7 +247,12 @@ def fetch_daily_problem():
         "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
     }
 
-    response = requests.request("POST", url, data=payload, headers=headers)
+    try:
+        response = requests.request("POST", url, data=payload, headers=headers, timeout=15)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"Error fetching daily problem: {e}")
+        return "https://leetcode.com/problemset/all/"
     
     today_date = datetime.now().strftime("%Y-%m-%d")
     link = "https://leetcode.com" + response.json()['data']['activeDailyCodingChallengeQuestion']['link'] + f"?envType=daily-question&envId={today_date}"

@@ -21,57 +21,43 @@ def json_safe(obj):
 async def get_daily_questions(
     user = Depends(get_current_user),
     db: Session = Depends(get_db),
-    redis: redis.Redis = Depends(get_redis_client),
+    redis_conn: redis.Redis = Depends(get_redis_client),
 ):
     today = datetime.date.today().isoformat()
-    # Deterministic randomness (same per day)
-    seed = int(today.replace("-", ""))
-    random.seed(seed)
+    
+    # 1. Try to get questions from cache
+    # Include allow_paid in cache key since it changes the result set
+    cache_key = f"daily_questions:{today}:paid_{user.allow_paid}"
+    cached_questions = await redis_conn.get(cache_key)
+    
+    if cached_questions:
+        result = json.loads(cached_questions)
+    else:
+        from helpers.problems import get_curated_problems_for_user
+        result = get_curated_problems_for_user(db, user, today)
+        
+        # Save to cache for 24 hours
+        await redis_conn.setex(cache_key, 86400, json.dumps(result))
 
-    result = {}
-    difficulties = ["Easy", "Medium", "Hard"]
-
-    for diff in difficulties:
-        # Fetch all IDs of this difficulty once
-        ids = [row[0] for row in db.query(Question.id).filter(Question.difficulty == diff).all()]
-        if not ids:
-            result[diff.lower()] = None
-            continue
-
-        random_id = random.choice(ids)
-        question = (
-            db.query(
-                Question.id,
-                Question.title,
-                Question.slug,
-                Question.acc_rate,
-                Question.paid_only,
-                Question.difficulty,
-                Question.topics,
-            )
-            .filter(Question.id == random_id)
-            .first()
-        )
-
-        if question:
-            q_dict = question._asdict()
-            # convert decimals safely
-            for k, v in q_dict.items():
-                if isinstance(v, Decimal):
-                    q_dict[k] = float(v)
-            result[diff.lower()] = q_dict
+    # 2. Dynamic status check (cached per user for 2 minutes)
+    user_status_cache_key = f"user_status:{user.public_id}:{today}"
+    cached_status = await redis_conn.get(user_status_cache_key)
+    
+    if cached_status:
+        status_map = json.loads(cached_status)
+    else:
+        from helpers.leetcode import get_problems_status_async
+        slugs = [p["slug"] for p in result.values() if p and "slug" in p]
+        if slugs:
+            # This is the slow part, we cache it
+            status_map = await get_problems_status_async(slugs, username=user.leetcode_username, session=user.leetcode_session)
+            await redis_conn.setex(user_status_cache_key, 120, json.dumps(status_map))
         else:
-            result[diff.lower()] = None
+            status_map = {}
 
-    response = {"date": today, "problems": result}
+    # Apply status to results
+    for key in result:
+        if result[key] and "slug" in result[key]:
+            result[key]["status"] = status_map.get(result[key]["slug"], "unattempted")
 
-    # Dynamic status check (not cached globally)
-    from helpers.leetcode import get_problems_status
-    slugs = [p["slug"] for p in result.values() if p and "slug" in p]
-    if slugs:
-        status_map = get_problems_status(slugs, username=user.leetcode_username, session=user.leetcode_session)
-        for key in result:
-            if result[key] and "slug" in result[key]:
-                result[key]["status"] = status_map.get(result[key]["slug"], "unattempted")
-
-    return response
+    return {"date": today, "problems": result}

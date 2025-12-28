@@ -68,6 +68,7 @@ async def sync_user_progress(
     stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
     stats.leetcode_connected = bool(user.leetcode_session)
     stats.leetcode_username = user.leetcode_username
+    stats.allow_paid = user.allow_paid
 
     return stats
 
@@ -99,6 +100,7 @@ async def update_leetcode_credentials(
 ):
     user.leetcode_username = request.username
     user.leetcode_session = request.session
+    user.allow_paid = request.allow_paid
     db.commit()
     return {"message": "LeetCode credentials updated successfully"}
 
@@ -141,6 +143,7 @@ async def update_difficulty(
     stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
     stats.leetcode_connected = bool(user.leetcode_session)
     stats.leetcode_username = user.leetcode_username
+    stats.allow_paid = user.allow_paid
 
     return stats
 
@@ -180,6 +183,7 @@ async def use_powerup(
     stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
     stats.leetcode_connected = bool(user.leetcode_session)
     stats.leetcode_username = user.leetcode_username
+    stats.allow_paid = user.allow_paid
 
     return stats
 
@@ -218,6 +222,7 @@ async def get_user_stats(
     
     stats.leetcode_connected = bool(user.leetcode_session)
     stats.leetcode_username = user.leetcode_username
+    stats.allow_paid = user.allow_paid
 
     return stats
 

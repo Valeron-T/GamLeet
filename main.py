@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from kite import kite_connect, generate_session
+import models # Ensure all models are registered for Base.metadata.create_all
 from models import User, UserStat  # Models to be created in DB when API starts
 from scheduler import (
     is_leetcode_solved_today,
