@@ -35,11 +35,16 @@ try:
 except Exception as e:
     print(f"Error creating database tables: {e}")
 
+# Environment Settings
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_PROD = ENVIRONMENT == "production"
+
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -105,7 +110,7 @@ async def zerodha_callback(
     db.commit()
 
     response = RedirectResponse(
-        url="http://localhost:5173/integrations", # Back to integrations to show success
+        url=f"{FRONTEND_URL}/integrations", # Back to integrations to show success
         status_code=302,
     )
 
@@ -113,8 +118,9 @@ async def zerodha_callback(
         key="user_id",
         value=str(user.public_id),
         httponly=True,
-        secure=False,  # True in prod
+        secure=IS_PROD,
         samesite="lax",
+        domain=".valeron.me" if IS_PROD else None,
         max_age=60 * 60 * 24,
     )
 

@@ -36,6 +36,8 @@ def initialize_user_data(db: Session, user: User):
     
     db.commit()
 
+IS_PROD = os.getenv("ENVIRONMENT") == "production"
+
 @router.post("/google")
 async def google_login(request: Request, response: Response, db: Session = Depends(get_db)):
     """
@@ -98,8 +100,9 @@ async def google_login(request: Request, response: Response, db: Session = Depen
             key="session_token",
             value=session_token,
             httponly=True,
-            secure=False, # Set to True in production (HTTPS)
+            secure=IS_PROD,
             samesite="lax",
+            domain=".valeron.me" if IS_PROD else None,
             max_age=60 * 60 * 24 * 30, # 30 days
         )
         
@@ -157,11 +160,11 @@ async def dev_login(request: Request, response: Response, db: Session = Depends(
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=False, # Secure = False for local dev
+        secure=IS_PROD,
         samesite="lax",
+        domain=".valeron.me" if IS_PROD else None,
         max_age=60 * 60 * 24 * 30,
     )
-    
     return {"message": "Dev Login successful", "user": {"email": user.email, "name": user.name}}
 
 @router.post("/logout")
@@ -183,3 +186,4 @@ async def get_current_user_info(user: User = Depends(get_current_user)):
         "picture": user.picture,
         "provider": user.oauth_provider
     }
+
