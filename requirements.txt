@@ -9,3 +9,6 @@ resend
 schedule
 sqlalchemy
 uvicorn
+cryptography
+requests
+google-auth
