@@ -62,7 +62,10 @@ class UserStat(Base):
     gamcoins = Column(Integer, default=0, nullable=False)
     total_xp = Column(Integer, default=0, nullable=False)
 
-
+    # Problem Set Preferences
+    problem_set_type = Column(VARCHAR(20), default="default", nullable=False)  # "default", "topics", "sheet"
+    problem_set_topics = Column(TEXT, nullable=True)  # JSON array of topics e.g., '["Array", "Dynamic Programming"]'
+    problem_set_sheet = Column(VARCHAR(50), nullable=True)  # e.g., "neetcode150"
 
     last_activity_date = Column(Date, nullable=True)
 

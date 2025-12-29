@@ -17,7 +17,7 @@ from scheduler import (
 )
 from sqlalchemy.orm import Session
 from leetcode.load_questions import leetcode_data_router
-from routes import daily, user, leaderboard, auth
+from routes import daily, user, leaderboard, auth, problems
 from contextlib import asynccontextmanager
 import os
 
@@ -140,3 +140,4 @@ app.include_router(daily.router)
 app.include_router(user.router)
 app.include_router(leaderboard.router)
 app.include_router(auth.router)
+app.include_router(problems.router)
