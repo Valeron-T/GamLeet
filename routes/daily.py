@@ -39,25 +39,23 @@ async def get_daily_questions(
         # Save to cache for 24 hours
         await redis_conn.setex(cache_key, 86400, json.dumps(result))
 
-    # 2. Dynamic status check (cached per user for 2 minutes)
-    user_status_cache_key = f"user_status:{user.public_id}:{today}"
-    cached_status = await redis_conn.get(user_status_cache_key)
+    # 2. Check status via database (Only shows as completed if synced)
+    from models import QuestionCompletion
+    question_ids = [p["id"] for p in result.values() if p and "id" in p]
     
-    if cached_status:
-        status_map = json.loads(cached_status)
-    else:
-        from helpers.leetcode import get_problems_status_async
-        slugs = [p["slug"] for p in result.values() if p and "slug" in p]
-        if slugs:
-            # This is the slow part, we cache it
-            status_map = await get_problems_status_async(slugs, username=user.leetcode_username, session=user.leetcode_session)
-            await redis_conn.setex(user_status_cache_key, 120, json.dumps(status_map))
-        else:
-            status_map = {}
+    completions = []
+    if question_ids:
+        completions = db.query(QuestionCompletion.question_id).filter(
+            QuestionCompletion.user_id == user.id,
+            QuestionCompletion.question_id.in_(question_ids)
+        ).all()
+        
+    completed_ids = {c[0] for c in completions}
 
     # Apply status to results
     for key in result:
-        if result[key] and "slug" in result[key]:
-            result[key]["status"] = status_map.get(result[key]["slug"], "unattempted")
+        if result[key] and "id" in result[key]:
+            is_completed = result[key]["id"] in completed_ids
+            result[key]["status"] = "completed" if is_completed else "unattempted"
 
     return {"date": today, "problems": result}

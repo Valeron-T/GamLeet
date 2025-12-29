@@ -1,16 +1,12 @@
 import os
 from kiteconnect import KiteConnect
-from dotenv import load_dotenv
 
-load_dotenv()
+def get_kite_client(api_key: str):
+    """Factory function to get a Kite client for a specific API key."""
+    return KiteConnect(api_key=api_key)
 
-ZERODHA_API_KEY = os.getenv("ZERODHA_API_KEY")
-ZERODHA_API_SECRET = os.getenv("ZERODHA_API_SECRET")
-
-kite_connect = KiteConnect(api_key=ZERODHA_API_KEY)
-
-def generate_session(request_token):
-    data = kite_connect.generate_session(request_token, api_secret=ZERODHA_API_SECRET)
-    kite_connect.set_access_token(data["access_token"])
+def generate_session(api_key, api_secret, request_token):
+    """Generates a session for a specific set of credentials."""
+    client = get_kite_client(api_key)
+    data = client.generate_session(request_token, api_secret=api_secret)
     return data
-    # Optionally, save access_token to a secure storage for reuse

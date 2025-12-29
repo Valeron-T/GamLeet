@@ -5,7 +5,7 @@ import os
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
-from dependencies import verify_api_key
+from dependencies import verify_admin_access
 from models import Question
 
 cookies = {

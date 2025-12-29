@@ -16,6 +16,14 @@ class User(Base):
     last_updated = Column(DateTime, server_default=func.now(), onupdate=func.now())
     name = Column(VARCHAR(255), unique=True, nullable=True)
     email = Column(VARCHAR(100), unique=True, nullable=True)
+    oauth_provider = Column(VARCHAR(20), default="dev") # "google" or "dev"
+    picture = Column(TEXT, nullable=True)
+    
+    # Zerodha Credentials (Stored Encrypted)
+    zerodha_api_key = Column(TEXT, nullable=True)
+    zerodha_api_secret = Column(TEXT, nullable=True)
+    
+    # LeetCode Stats
     leetcode_username = Column(VARCHAR(100), nullable=True)
     leetcode_session = Column(TEXT, nullable=True)
     allow_paid = Column(Integer, default=0) # 0 = No, 1 = Yes
@@ -94,4 +102,14 @@ class QuestionCompletion(Base):
     user_id = Column(Integer, nullable=False, index=True)
     question_id = Column(Integer, nullable=False, index=True)
     rewarded_at = Column(DateTime, server_default=func.current_timestamp())
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    session_token = Column(CHAR(64), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.current_timestamp())
+    expires_at = Column(DateTime, nullable=False)
 

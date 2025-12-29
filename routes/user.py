@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -8,10 +9,10 @@ from schemas.user_stats import UserStatsResponse, DifficultyUpdateRequest
 from schemas.inventory import InventoryResponse, InventoryItem, AchievementsResponse, Achievement
 from schemas.user_leetcode import LeetCodeUpdate
 
-from kite import kite_connect
-from security import decrypt_token
-from scheduler import check_dsa_completion
-from dependencies import get_redis_client 
+from security import decrypt_token, encrypt_token
+from scheduler import check_all_users_dsa
+from schemas.zerodha import ZerodhaCredentialsUpdate
+from schemas.zerodha import ZerodhaCredentialsUpdate
 import json
 
 router = APIRouter(prefix="/user", tags=["User"])
@@ -25,21 +26,45 @@ async def fetch_and_cache_margins(user, redis):
         return json.loads(cached)
     
     # Fetch from Zerodha if access token exists
-    if not user.access_token:
-        return {"equity": {"available": {"live_balance": 0}}}
+    if not user.access_token or not user.zerodha_api_key:
+        return {"equity": {"available": {"live_balance": 0}}, "error": "No credentials"}
         
     try:
-        from kite import kite_connect
+        from kite import get_kite_client
+        api_key = decrypt_token(user.zerodha_api_key)
         access_token = decrypt_token(user.access_token)
-        kite_connect.set_access_token(access_token)
-        margins = kite_connect.margins()
+        
+        kite_client = get_kite_client(api_key)
+        kite_client.set_access_token(access_token)
+        margins = kite_client.margins()
         
         # Cache for 1 hour
         await redis.set(cache_key, json.dumps(margins), ex=3600)
         return margins
     except Exception as e:
-        print(f"Error fetching margins: {e}")
-        return {"equity": {"available": {"live_balance": 0}}}
+        print(f"Error fetching margins for user {user.id}: {e}")
+        return {"equity": {"available": {"live_balance": 0}}, "error": str(e)}
+
+def extract_wallet_balance(margins):
+    """Safely extracts the most relevant balance from Zerodha margins response."""
+    if not margins:
+        return 0
+    
+    def get_seg_balance(seg_data):
+        if not seg_data:
+            return 0
+        available = seg_data.get("available", {})
+        # Priority: Net > Live Balance > Cash > Opening
+        return (seg_data.get("net") or 
+                available.get("live_balance") or 
+                available.get("cash") or 
+                available.get("opening_balance") or 0)
+
+    equity_balance = get_seg_balance(margins.get("equity", {}))
+    commodity_balance = get_seg_balance(margins.get("commodity", {}))
+    
+    # Return total balance across both segments
+    return (equity_balance or 0) + (commodity_balance or 0)
 
 @router.post("/sync", response_model=UserStatsResponse)
 async def sync_user_progress(
@@ -47,7 +72,8 @@ async def sync_user_progress(
     db: Session = Depends(get_db),
     redis = Depends(get_redis_client),
 ):
-    check_dsa_completion(db)
+    from scheduler import check_dsa_completion
+    check_dsa_completion(user, db)
     stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
     if not stats:
         raise HTTPException(status_code=404, detail="User stats not found")
@@ -65,12 +91,40 @@ async def sync_user_progress(
 
     # Inject real-time balance
     margins = await fetch_and_cache_margins(user, redis)
-    stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+    stats.available_balance = extract_wallet_balance(margins)
+    stats.zerodha_error = margins.get("error")
     stats.leetcode_connected = bool(user.leetcode_session)
     stats.leetcode_username = user.leetcode_username
+    stats.zerodha_connected = bool(user.zerodha_api_key)
     stats.allow_paid = user.allow_paid
 
     return stats
+
+
+@router.get("/login")
+def start_zerodha_login(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+): 
+    """
+    Initiates the Zerodha login flow for the current authenticated user.
+    """
+    if not user.zerodha_api_key:
+        raise HTTPException(status_code=400, detail="Zerodha API credentials not configured")
+        
+    try:
+        from kite import get_kite_client
+        api_key = decrypt_token(user.zerodha_api_key)
+        kite_client = get_kite_client(api_key)
+        
+        # In a multi-tenant app, we'd ideally pass the public_id as 'state' 
+        # to identify the user on callback.
+        login_url = kite_client.login_url()
+        
+        return RedirectResponse(url=login_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate login URL: {str(e)}")
+
 
 @router.post("/disconnect-zerodha")
 async def disconnect_zerodha(
@@ -79,7 +133,8 @@ async def disconnect_zerodha(
     redis = Depends(get_redis_client),
 ):
     user.access_token = None
-    user.zerodha_id = None
+    user.zerodha_api_key = None
+    user.zerodha_api_secret = None
     
     # Clear cache
     await redis.delete(f"user:{user.id}:margins")
@@ -104,6 +159,17 @@ async def update_leetcode_credentials(
     db.commit()
     return {"message": "LeetCode credentials updated successfully"}
 
+@router.post("/zerodha")
+async def update_zerodha_credentials(
+    request: ZerodhaCredentialsUpdate,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user.zerodha_api_key = encrypt_token(request.api_key.strip())
+    user.zerodha_api_secret = encrypt_token(request.api_secret.strip())
+    db.commit()
+    return {"message": "Zerodha credentials updated successfully"}
+
 @router.post("/difficulty", response_model=UserStatsResponse)
 async def update_difficulty(
     request: DifficultyUpdateRequest,
@@ -113,7 +179,11 @@ async def update_difficulty(
 ):
     stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
     if not stats:
-        raise HTTPException(status_code=404, detail="User stats not found")
+        # Self-healing: Create stats if missing
+        stats = UserStat(user_id=user.id)
+        db.add(stats)
+        db.commit()
+        db.refresh(stats)
     
     new_mode = request.difficulty_mode.lower()
     if new_mode not in ["sandbox", "normal", "hardcore", "god"]:
@@ -140,9 +210,11 @@ async def update_difficulty(
     stats.email = user.email
     
     margins = await fetch_and_cache_margins(user, redis)
-    stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+    stats.available_balance = extract_wallet_balance(margins)
+    stats.zerodha_error = margins.get("error")
     stats.leetcode_connected = bool(user.leetcode_session)
     stats.leetcode_username = user.leetcode_username
+    stats.zerodha_connected = bool(user.zerodha_api_key)
     stats.allow_paid = user.allow_paid
 
     return stats
@@ -155,7 +227,11 @@ async def use_powerup(
 ):
     stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
     if not stats:
-        raise HTTPException(status_code=404, detail="User stats not found")
+        # Self-healing: Create stats if missing
+        stats = UserStat(user_id=user.id)
+        db.add(stats)
+        db.commit()
+        db.refresh(stats)
     
     mode = stats.difficulty_mode.lower()
     
@@ -180,9 +256,11 @@ async def use_powerup(
     stats.email = user.email
     
     margins = await fetch_and_cache_margins(user, redis)
-    stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+    stats.available_balance = extract_wallet_balance(margins)
+    stats.zerodha_error = margins.get("error")
     stats.leetcode_connected = bool(user.leetcode_session)
     stats.leetcode_username = user.leetcode_username
+    stats.zerodha_connected = bool(user.zerodha_api_key)
     stats.allow_paid = user.allow_paid
 
     return stats
@@ -200,7 +278,22 @@ async def get_user_stats(
     )
 
     if not stats:
-        raise HTTPException(status_code=404, detail="User stats not found")
+        # Self-healing: Create stats if missing
+        stats = UserStat(user_id=user.id)
+        db.add(stats)
+        
+        # Also initialize inventory
+        inventory_exists = db.query(UserInventory).filter(UserInventory.user_id == user.id).first()
+        if not inventory_exists:
+            starter_items = [
+                UserInventory(user_id=user.id, item_id="streak-freeze", quantity=1),
+                UserInventory(user_id=user.id, item_id="penalty-shield", quantity=1)
+            ]
+            for item in starter_items:
+                db.add(item)
+                
+        db.commit()
+        db.refresh(stats)
     
     if user.name:
         parts = user.name.split()
@@ -216,12 +309,15 @@ async def get_user_stats(
     # Inject real-time balance from Redis/Zerodha
     if user.access_token:
         margins = await fetch_and_cache_margins(user, redis)
-        stats.available_balance = margins.get("equity", {}).get("available", {}).get("live_balance", 0)
+        stats.available_balance = extract_wallet_balance(margins)
+        stats.zerodha_error = margins.get("error")
     else:
         stats.available_balance = 0
+        stats.zerodha_error = "Zerodha not connected"
     
     stats.leetcode_connected = bool(user.leetcode_session)
     stats.leetcode_username = user.leetcode_username
+    stats.zerodha_connected = bool(user.zerodha_api_key)
     stats.allow_paid = user.allow_paid
 
     return stats

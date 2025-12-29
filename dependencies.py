@@ -8,25 +8,38 @@ from database import get_db
 from models import User
 
 
+from datetime import datetime
+from models import User, UserSession
+
 def get_current_user(
-    user_id: str | None = Cookie(None),
+    session_token: str | None = Cookie(None),
     db: Session = Depends(get_db),
 ):
-    if not user_id:
+    if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    user = db.query(User).filter(User.public_id == user_id).first()
+    # Verify session in database
+    session = db.query(UserSession).filter(
+        UserSession.session_token == session_token,
+        UserSession.expires_at > datetime.now()
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    user = db.query(User).filter(User.id == session.user_id).first()
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid user")
-    print(user.public_id)
+        raise HTTPException(status_code=401, detail="User not found")
+        
     return user
 
 
-def verify_api_key(x_api_key: str = Header(...)):
+
+def verify_admin_access(x_api_key: str = Header(None)):
     if x_api_key != os.getenv("X_API_KEY"):
-        raise HTTPException(
+         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
+            detail="Invalid Admin API key",
         )
 
 
