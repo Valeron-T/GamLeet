@@ -136,7 +136,19 @@ def check_dsa_completion(user: User, db: Session):
                 db.commit()
             return
 
+        from datetime import timedelta
         print(f"DSA solved today. Updating streak stats for user {user.id}")
+        
+        # Streak increment logic
+        if stats.last_activity_date == today - timedelta(days=1):
+            stats.current_streak += 1
+        else:
+            # First time or broke streak
+            stats.current_streak = 1
+            
+        if stats.current_streak > stats.max_streak:
+            stats.max_streak = stats.current_streak
+
         stats.problems_solved += 1
         stats.problems_since_last_life += 1
         stats.last_activity_date = today
@@ -170,6 +182,24 @@ def check_dsa_completion(user: User, db: Session):
             should_execute_penalty = True
 
     if should_execute_penalty:
+        # Check for streak freeze
+        from models import UserInventory
+        freeze = db.query(UserInventory).filter(
+            UserInventory.user_id == user.id,
+            UserInventory.item_id == "streak-freeze",
+            UserInventory.quantity > 0
+        ).first()
+
+        if freeze:
+            print(f"User {user.id} missed DSA but has a Streak Freeze! Consuming one.")
+            freeze.quantity -= 1
+            # We don't delete if quantity > 0, SQLAlchemy handles the update
+            db.commit()
+            return
+
+        # No freeze, reset streak and execute penalty
+        stats.current_streak = 0
+        db.commit()
         execute_zerodha_penalty(user, db)
 
 def execute_zerodha_penalty(user, db: Session):
