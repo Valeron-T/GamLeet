@@ -29,7 +29,8 @@ async def get_all_problems(
     
     # Apply filters
     if difficulty:
-        query = query.filter(Question.difficulty == difficulty)
+        from sqlalchemy import func
+        query = query.filter(func.lower(Question.difficulty) == difficulty.lower())
     if topic:
         query = query.filter(Question.topics.contains(topic))
     if search:

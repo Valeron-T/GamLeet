@@ -58,4 +58,7 @@ async def get_daily_questions(
             is_completed = result[key]["id"] in completed_ids
             result[key]["status"] = "completed" if is_completed else "unattempted"
 
-    return {"date": today, "problems": result}
+    from helpers.leetcode import fetch_daily_problem
+    daily_link = fetch_daily_problem()
+
+    return {"date": today, "problems": result, "daily_link": daily_link}

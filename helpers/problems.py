@@ -83,6 +83,15 @@ def get_curated_problems_for_user(db: Session, user: User, date_str: str = None)
     if not all_eligible:
         return {"easy": None, "medium": None, "hard": None}
 
+    # Group by difficulty (normalized to lowercase)
+    by_diff = {"easy": [], "medium": [], "hard": []}
+    for q in all_eligible:
+        diff_lower = q.difficulty.lower()
+        if diff_lower in by_diff:
+            by_diff[diff_lower].append(q)
+        elif diff_lower == "med": # Handle inconsistencies
+            by_diff["medium"].append(q)
+
     if problem_set_type == "sheet":
         # Random pick 3 from all eligible
         if len(all_eligible) >= 3:
@@ -93,18 +102,10 @@ def get_curated_problems_for_user(db: Session, user: User, date_str: str = None)
                 selected_questions.append(random.choice(all_eligible))
     else:
         # Default or Topics -> try 1 of each difficulty
-        by_diff = {"Easy": [], "Medium": [], "Hard": []}
-        for q in all_eligible:
-            if q.difficulty in by_diff:
-                by_diff[q.difficulty].append(q)
-            elif q.difficulty == "Med": # Handle inconsistencies if any
-                by_diff["Medium"].append(q)
-        
-        # Try to pick 1 from each
         temp_selected = [None, None, None]
-        diffs = ["Easy", "Medium", "Hard"]
+        diff_order = ["easy", "medium", "hard"]
         
-        for i, diff in enumerate(diffs):
+        for i, diff in enumerate(diff_order):
             if by_diff[diff]:
                 q = random.choice(by_diff[diff])
                 temp_selected[i] = q
