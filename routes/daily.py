@@ -58,7 +58,32 @@ async def get_daily_questions(
             is_completed = result[key]["id"] in completed_ids
             result[key]["status"] = "completed" if is_completed else "unattempted"
 
-    from helpers.leetcode import fetch_daily_problem
-    daily_link = fetch_daily_problem()
+    from helpers.leetcode import fetch_daily_problem, is_leetcode_solved_today
+    daily_problem_data = fetch_daily_problem()
+    
+    # Check status of daily problem
+    daily_status = "unattempted"
+    if daily_problem_data.get("slug"):
+        # Check if completed in DB first (fastest)
+        if daily_problem_data["id"] in completed_ids:
+             daily_status = "completed"
+        else:
+             # Check real-time if not in DB (might be just solved)
+             # Note: logic in /sync (scheduler) will actually update DB. 
+             # Here we just want to show current state. 
+             # If user hasn't synced, it might show unattempted even if solved on LeetCode. 
+             # The user's request emphasized "when sync is clicked also check...".
+             # So showing "unattempted" until sync is fine/expected behavior for this app's architecture.
+             # However, we can be nice and check if we have it.
+             pass
 
-    return {"date": today, "problems": result, "daily_link": daily_link}
+    return {
+        "date": today, 
+        "problems": result, 
+        "daily_link": daily_problem_data.get("link"),
+        "daily_problem": {
+            "title": daily_problem_data.get("title", "Daily Problem"),
+            "slug": daily_problem_data.get("slug"),
+            "status": daily_status
+        }
+    }

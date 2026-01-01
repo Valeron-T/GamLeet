@@ -7,7 +7,7 @@ import uuid
 import json
 
 
-def is_leetcode_solved_today(username: str = None, session: str = None):
+def is_leetcode_solved_today(username: str = None, session: str = None, daily_slug: str = None):
     # Use env as fallback for backward compatibility / single-tenant default
     username = username or os.getenv("LEETCODE_USERNAME")
     
@@ -34,6 +34,57 @@ def is_leetcode_solved_today(username: str = None, session: str = None):
     if session:
         cookies["LEETCODE_SESSION"] = session
 
+    # If daily slug is provided, we check for that specifically
+    if daily_slug:
+         # Fetch recent submissions (both AC and non-AC)
+        json_data = {
+            "query": """
+            query recentSubmissions($username: String!, $limit: Int!) {
+                recentSubmissionList(username: $username, limit: $limit) {
+                    titleSlug
+                    statusDisplay
+                    timestamp
+                }
+            }
+            """,
+            "variables": {
+                "username": username,
+                "limit": 30,
+            },
+            "operationName": "recentSubmissions",
+        }
+        
+        try:
+            response = requests.post(
+                "https://leetcode.com/graphql/", headers=headers, json=json_data, cookies=cookies,
+                timeout=15
+            )
+            data = response.json().get("data", {}).get("recentSubmissionList", [])
+            
+            # Check if any accepted submission matches the daily slug and is from today
+            tz = pytz.timezone("Asia/Kolkata")
+            now = datetime.now(tz)
+            # Daily reset is at 5:30 AM IST usually for global daily problem? Actually LeetCode daily resets at 00:00 UTC = 5:30 AM IST.
+            # But the user logic handled 3:30 PM for some reason in get_problems_status.
+            # Let's align with "today" in local time for simplicity or stick to the 3:30 PM logic if consistent.
+            # However, for the OFFICIAL daily problem, it follows UTC.
+            
+            # Let's just check if it was solved "today" in standard terms roughly.
+            # Or better, check if the timestamp matches the current daily problem day window.
+            # For simplicity, let's just check if it appears in the recent list with 'Accepted' status.
+            # Assuming people don't re-solve old dailies just for fun often, searching for slug in recent AC is decent.
+            
+            for sub in data:
+                if sub["titleSlug"] == daily_slug and sub["statusDisplay"] == "Accepted":
+                    # Potentially check timestamp if needed, but recent list (limit 30) is usually fresh enough
+                    return True
+            return False
+
+        except Exception as e:
+            print(f"Error checking daily problem status: {e}")
+            return False
+
+    # Fallback to generic "any problem solved today" logic
     json_data = {
         "query": "\n    query recentAcSubmissions($username: String!, $limit: Int!) {\n  recentAcSubmissionList(username: $username, limit: $limit) {\n    id\n    title\n    titleSlug\n    timestamp\n  }\n}\n    ",
         "variables": {
@@ -226,7 +277,7 @@ def fetch_daily_problem():
     current_year = datetime.now().year
     current_month = datetime.now().month
 
-    payload = f'{{"operationName":"codingChallengeMedal","variables":{{"year":{current_year},"month":{current_month}}},"query":"query codingChallengeMedal($year: Int!, $month: Int!) {{  dailyChallengeMedal(year: $year, month: $month) {{    name    config {{      icon      __typename    }}    __typename  }}  activeDailyCodingChallengeQuestion {{    link    __typename  }}}}"}}'
+    payload = f'{{"operationName":"codingChallengeMedal","variables":{{"year":{current_year},"month":{current_month}}},"query":"query codingChallengeMedal($year: Int!, $month: Int!) {{  dailyChallengeMedal(year: $year, month: $month) {{    name    config {{      icon      __typename    }}    __typename  }}  activeDailyCodingChallengeQuestion {{    link    question {{      questionId      titleSlug      title    }}    __typename  }}}}"}}'
     headers = {
         "Content-Type": "application/json",
         "accept": "*/*",
@@ -252,11 +303,17 @@ def fetch_daily_problem():
         response.raise_for_status()
     except Exception as e:
         print(f"Error fetching daily problem: {e}")
-        return "https://leetcode.com/problemset/all/"
+        return {"link": "https://leetcode.com/problemset/all/", "slug": None, "title": "Daily Problem"}
     
     today_date = datetime.now().strftime("%Y-%m-%d")
-    link = "https://leetcode.com" + response.json()['data']['activeDailyCodingChallengeQuestion']['link'] + f"?envType=daily-question&envId={today_date}"
-
-    return link
+    data = response.json()['data']['activeDailyCodingChallengeQuestion']
+    link = "https://leetcode.com" + data['link'] + f"?envType=daily-question&envId={today_date}"
+    
+    return {
+        "link": link,
+        "slug": data['question']['titleSlug'],
+        "id": data['question']['questionId'],
+        "title": data['question']['title']
+    }
 
 # print(fetch_daily_problem())

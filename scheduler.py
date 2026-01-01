@@ -84,6 +84,47 @@ def check_dsa_completion(user: User, db: Session):
                 else:
                     print(f"Warning: No rewards config found for difficulty: {difficulty}")
 
+    # --- Daily Problem Check ---
+    from helpers.leetcode import fetch_daily_problem
+    daily_problem = fetch_daily_problem()
+    
+    if daily_problem.get("slug"):
+        daily_slug = daily_problem["slug"]
+        daily_id = daily_problem["id"]
+
+        is_daily_solved = is_leetcode_solved_today(username=user.leetcode_username, session=user.leetcode_session, daily_slug=daily_slug)
+        
+        if is_daily_solved:
+             # Check if already rewarded for THIS specific daily problem ID (assuming ID is unique per daily occurrence or question)
+             # Note: LeetCode questionId is static for the problem. 
+             # We should probably track it with a specific completion marker or trust QuestionCompletion if we want to treat it as "just another question".
+             # However, the user wants "Daily Problem" reward. The requirement implies a repeating reward potentially?
+             # Actually, if I solve "Two Sum" today as a daily, and it comes up again next year, I should probably get rewarded again? 
+             # But QuestionCompletion prevents duplicate rewards for the same question ID. 
+             # Let's assume for now standard QuestionCompletion logic applies + Bonus. 
+             # OR, since it's a "Quest", maybe we need a separate "DailyQuestCompletion" table?
+             # For simplicity and speed: Use QuestionCompletion to prevent double dips on the SAME day/problem. 
+             # BUT, since we want to award specifically for it being the "Daily Problem", let's check if the generic "Daily Problem" reward was given today?
+             # No, the prompt says "award bonus points for the same".
+             # Let's just give 85 GC if they haven't solved it *via this flow* yet.
+             # Actually, simpler: Check if they have a completion for this question ID. If NOT, give them standard + bonus? 
+             # Or just give specific Daily Problem reward (85 GC).
+             
+             already_rewarded_daily = db.query(QuestionCompletion).filter(
+                QuestionCompletion.user_id == user.id,
+                QuestionCompletion.question_id == daily_id
+            ).first()
+
+             if not already_rewarded_daily:
+                print(f"User {user.id} completed DAILY problem {daily_slug}. Granting 30 GC Bonus.")
+                stats.gamcoins += 30
+                stats.total_xp += 150 # Bonus XP? Let's give some.
+
+                completion = QuestionCompletion(user_id=user.id, question_id=daily_id)
+                db.add(completion)
+                rewards_granted = True
+    # ---------------------------
+
     # 2. Handle Streak / Streak Maintenance logic
     dsa_solved = is_leetcode_solved_today(username=user.leetcode_username, session=user.leetcode_session)
     
