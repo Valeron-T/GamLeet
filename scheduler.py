@@ -142,13 +142,44 @@ def execute_zerodha_penalty(user, db: Session):
     kite_client = get_kite_client(decrypt_token(user.zerodha_api_key))
     kite_client.set_access_token(decrypt_token(user.access_token))
 
+    import random
+    
+    stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
+    risk_amount = stats.daily_risk_amount if stats else 50
+    
+    # List of penny stocks/volatile stocks
+    PENNY_STOCKS = ["SUZLON", "IDEA", "YESBANK", "JPPOWER", "UCOBANK"]
+    
+    chosen_stock = random.choice(PENNY_STOCKS)
+    exchange = kite_client.EXCHANGE_NSE
+    instrument_token = f"{exchange}:{chosen_stock}"
+    
+    quantity = 1
+    
+    try:
+        quote = kite_client.quote(instrument_token)
+        ltp = quote[instrument_token]["last_price"]
+        
+        if ltp > 0:
+            quantity = int(risk_amount // ltp)
+            
+        # Ensure at least 1 qty if risk amount is low but non-zero, or just fallback to 1
+        if quantity < 1:
+            quantity = 1
+            
+        print(f"Penalty calculation: Stock={chosen_stock}, LTP={ltp}, Risk={risk_amount}, Qty={quantity}")
+        
+    except Exception as e:
+        print(f"Error fetching quote for {chosen_stock}: {e}. Defaulting to Qty=1")
+        quantity = 1
+
     try:
         order_id = kite_client.place_order(
             variety=kite_client.VARIETY_REGULAR,
-            tradingsymbol="IDEA",
-            exchange=kite_client.EXCHANGE_NSE,
+            tradingsymbol=chosen_stock,
+            exchange=exchange,
             transaction_type=kite_client.TRANSACTION_TYPE_BUY,
-            quantity=1, # Reduce to 1 for generic safety
+            quantity=quantity, 
             order_type=kite_client.ORDER_TYPE_MARKET,
             product=kite_client.PRODUCT_CNC,
             validity=kite_client.VALIDITY_DAY,
@@ -160,10 +191,10 @@ def execute_zerodha_penalty(user, db: Session):
             try:
                 order_id = kite_client.place_order(
                     variety=kite_client.VARIETY_AMO,
-                    tradingsymbol="IDEA",
-                    exchange=kite_client.EXCHANGE_NSE,
+                    tradingsymbol=chosen_stock,
+                    exchange=exchange,
                     transaction_type=kite_client.TRANSACTION_TYPE_BUY,
-                    quantity=1,
+                    quantity=quantity,
                     order_type=kite_client.ORDER_TYPE_MARKET,
                     product=kite_client.PRODUCT_CNC,
                     validity=kite_client.VALIDITY_DAY,

@@ -58,6 +58,8 @@ class UserStat(Base):
     problems_since_last_life = Column(Integer, default=0, nullable=False)
     lives = Column(Integer, default=3, nullable=False)
     difficulty_mode = Column(VARCHAR(20), default="normal", nullable=False)
+    daily_risk_amount = Column(Integer, default=50, nullable=False) # In INR
+    risk_locked = Column(Integer, default=0, nullable=False) # 0 = False, 1 = True
     powerups_used_today = Column(Integer, default=0, nullable=False)
     gamcoins = Column(Integer, default=0, nullable=False)
     total_xp = Column(Integer, default=0, nullable=False)

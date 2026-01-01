@@ -97,6 +97,7 @@ async def sync_user_progress(
     stats.leetcode_username = user.leetcode_username
     stats.zerodha_connected = bool(user.zerodha_api_key)
     stats.allow_paid = user.allow_paid
+    stats.risk_locked = bool(stats.risk_locked)
 
     return stats
 
@@ -199,6 +200,12 @@ async def update_difficulty(
     elif new_mode == "sandbox" or new_mode == "god":
         stats.lives = 0 # Lives don't matter in sandbox, no buffer in god mode
     
+    if request.daily_risk_amount is not None:
+        stats.daily_risk_amount = request.daily_risk_amount
+        
+    if request.risk_locked is not None:
+        stats.risk_locked = 1 if request.risk_locked else 0
+    
     db.commit()
 
     # Populate response fields
@@ -216,6 +223,7 @@ async def update_difficulty(
     stats.leetcode_username = user.leetcode_username
     stats.zerodha_connected = bool(user.zerodha_api_key)
     stats.allow_paid = user.allow_paid
+    stats.risk_locked = bool(stats.risk_locked) # Convert integer to bool for response
 
     return stats
 
@@ -262,6 +270,7 @@ async def use_powerup(
     stats.leetcode_username = user.leetcode_username
     stats.zerodha_connected = bool(user.zerodha_api_key)
     stats.allow_paid = user.allow_paid
+    stats.risk_locked = bool(stats.risk_locked)
 
     return stats
 
@@ -319,6 +328,7 @@ async def get_user_stats(
     stats.leetcode_username = user.leetcode_username
     stats.zerodha_connected = bool(user.zerodha_api_key)
     stats.allow_paid = user.allow_paid
+    stats.risk_locked = bool(stats.risk_locked)
 
     return stats
 

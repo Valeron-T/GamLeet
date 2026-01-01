@@ -23,9 +23,13 @@ class UserStatsResponse(BaseModel):
     allow_paid: int = 0
     zerodha_error: Optional[str] = None
     last_activity_date: Optional[date] = None
+    daily_risk_amount: int = 50
+    risk_locked: bool = False
 
     class Config:
         orm_mode = True
 
 class DifficultyUpdateRequest(BaseModel):
     difficulty_mode: str
+    daily_risk_amount: Optional[int] = 50
+    risk_locked: Optional[bool] = False
