@@ -1,39 +1,40 @@
-# 🎲 GamLeet — Punish Your Procrastination with Market Chaos
+# 🎲 GamLeet — Automated Accountability via Financial Pain
 
-**GamLeet** is a self-hosted FastAPI app that *automates shame* by linking your Leetcode grind to your financial well-being.
+**GamLeet** is a self-hosted FastAPI application that automates discipline by linking your LeetCode consistency to your Zerodha brokerage account.
 
-If you skip your daily DSA problem, **GamLeet punishes you** by executing a buy order for a random (usually terrible) stock using Zerodha's Kite Connect API. Want to suffer for your sins in real time? Now you can — with receipts.
+**The Loop is Simple:**
+1. **Code**: Solve 3 daily problems (Easy/Medium/Hard).
+2. **Streak**: Maintain your streak to earn `GamCoins` & XP.
+3. **Fail**: Skip a day? GamLeet executes a **market buy order** for a random, volatile stock. 
+4. **Suffer**: Watch your portfolio confusingly accumulate random assets.
 
 ---
 
 ## 💡 Why?
 
-You're not lazy — you're *accountability-challenged*.
-
-- Tired of skipping Leetcode and pretending you'll "do it later"?
-- Need a reason stronger than "career growth" to actually practice?
-- Love pain and poor financial decisions?
-
-**This app weaponizes your brokerage account** to enforce discipline.
+Willpower is finite. Loss aversion is biological.
+GamLeet weaponizes your greed against your laziness.
 
 ---
 
-## 🧠 Features
+## 🧠 Core Features
 
-- ⏱️ Daily DSA tracking with Leetcode integration (WIP)
-- 💸 Automatic stock purchase if you miss your daily goal
-- 📧 Sarcastic shame email notifications for extra guilt
-- 📦 Easily self-hostable with Docker and FastAPI
-- 🔐 Kite Connect integration (Zerodha account required)
+- **⏱️ Daily Tracking**: automatically pulls your daily submission stats from LeetCode.
+- **💸 Automated Penalties**: Integrated with **Zerodha Kite Connect** to execute real trades on failure.
+- **🛡️ Power-up System**: Buy `Streak Freezes` and `Penalty Shields` using in-app currency earned from consistency.
+- **🚶 First-Time Walkthrough**: Backend support for tracking user onboarding status.
+- **📧 Shame Notifications**: Emails via Resend to let you know exactly what you bought and why.
+- **🔒 Secure Session Management**: Custom session-based auth with secure cookies.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- Python + FastAPI
-- SQLAlchemy + MySQL
-- Zerodha Kite Connect API
-- Resend for emails (with ✨ maximum sarcasm)
+- **Framework**: Python (FastAPI)
+- **Database**: MySQL (via SQLAlchemy)
+- **Caching**: Redis (for session & stat caching)
+- **Broker Integration**: Zerodha Kite Connect API
+- **Email**: Resend API
 
 ---
 
@@ -41,66 +42,61 @@ You're not lazy — you're *accountability-challenged*.
 
 1. **Clone the repo**  
    ```bash
-   git clone https://github.com/your-username/GamLeet.git
+   git clone https://github.com/valeron-t/gamleet.git
    cd GamLeet
-    ```
+   ```
 
 2. **Install Dependencies**
-    ```bash
-    pip install -r requirements.txt
-    ```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 3. **Set up environment variables (`.env`)**
-    ```
-    ENCRYPTION_KEY=""
-    LEETCODE_USERNAME='johndoe'
-    RESEND_API_KEY="re_*********************************"
-    SQLALCHEMY_DATABASE_URL="mysql+pymysql://username:password@host:port/dbname"
-    ZERODHA_API_KEY=''
-    ZERODHA_API_SECRET=''
-    ZERODHA_ID='ABC123'
-    ```
+   ```env
+   # Database & Redis
+   SQLALCHEMY_DATABASE_URL="mysql+pymysql://user:pass@host/db"
+   REDIS_CONN_STRING="redis://user:pass@host:port"
 
-4. **Install Dependencies**
-    ```bash
-    pip install -r requirements.txt
-    ```
+   # Zerodha Credentials
+   ZERODHA_API_KEY="your_api_key"
+   ZERODHA_API_SECRET="your_api_secret"
+   ZERODHA_ID="your_user_id"
 
----
+   # Security
+   ENCRYPTION_KEY="generated_key"
+   GOOGLE_CLIENT_ID="your_google_client_id"
+   ENVIRONMENT="development" # or production
 
-## 🧪 Example Flow
+   # Notifications
+   RESEND_API_KEY="re_..."
+   ```
 
-- You skip Leetcode.
-
-- At 3pm IST, Gameleet checks your streak.
-
-- You failed.
-
-- It executes a random order on your Zerodha account.
-
-- You receive a sarcastic email shaming your laziness.
-
-- You cry. Then code tomorrow. Hopefully.
+4. **Run the Server**
+   ```bash
+   uvicorn main:app --reload
+   ```
 
 ---
 
-##  🛡️ Disclaimers
-- This is designed for personal use and educational purposes.
+## 🔄 The Logic
 
-- Know what you're doing before connecting your brokerage account.
-
-- Market orders can and will hurt you. Gameleet doesn't care.
+- **Scheduler**: Runs daily at 3:30 PM IST (market close).
+- **Check**: Did `user.problems_solved` increase by 3 today?
+- **Result**:
+    - **Yes**: Increment Streak, Award GamCoins, Grant XP.
+    - **No**: Check for `Streak Freeze`. 
+        - If available: Consume Freeze, maintain streak.
+        - If none: **Reset Streak**, check for `Penalty Shield`.
+            - If Shield available: Consume Shield, skip penalty.
+            - If no Shield: **EXECUTE MARKET ORDER**.
 
 ---
 
-##  🙃 Motivation-as-a-Service
-- If shame, sarcasm, and stock losses won’t get you to code... maybe nothing will.
+## ⚠️ Disclaimer
+
+**This software performs REAL FINANCIAL TRANSACTIONS.** 
+It is designed to lose you money if you are lazy. Use at your own risk. The developers are not responsible for your financial ruin, though we might find it amusing.
 
 ---
-
-##  🪦 Star this repo if you want to be publicly accountable
-- Fork it if you want to drag your friends into this spiral too. (Why suffer alone?)
 
 ### Built by @valerontoscano
-### Punishment delivered by Gameleet™
-
