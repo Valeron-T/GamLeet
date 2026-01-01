@@ -27,6 +27,9 @@ class User(Base):
     leetcode_username = Column(VARCHAR(100), nullable=True)
     leetcode_session = Column(TEXT, nullable=True)
     allow_paid = Column(Integer, default=0) # 0 = No, 1 = Yes
+    
+    # Preferences
+    email_notifications = Column(Integer, default=1) # 0 = Off, 1 = On
 
 
 class Question(Base):

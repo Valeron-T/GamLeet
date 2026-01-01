@@ -25,6 +25,7 @@ class UserStatsResponse(BaseModel):
     last_activity_date: Optional[date] = None
     daily_risk_amount: int = 50
     risk_locked: bool = False
+    email_notifications: bool = True
 
     class Config:
         orm_mode = True
@@ -33,3 +34,6 @@ class DifficultyUpdateRequest(BaseModel):
     difficulty_mode: str
     daily_risk_amount: Optional[int] = 50
     risk_locked: Optional[bool] = False
+
+class EmailPreferenceUpdate(BaseModel):
+    enabled: bool

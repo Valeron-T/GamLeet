@@ -120,11 +120,41 @@ SARCASTIC_EMAILS = [
 ]
 
 
-def build_penalty_email():
+NUDGE_EMAILS = [
+    {
+        "subject": "⚠️ Tick Tock: Your Streak is Sweating",
+        "html": """
+            <p><strong>Look who’s procrastinating again!</strong></p>
+            <p>Just a friendly reminder that you haven't solved today's DSA problem yet. The market is wide open, and our stock-buying bot is currently sharpening its teeth.</p>
+            <p>You have until 3:00 PM to prove you're not a quitter. Or don't. We've already picked out a really tragic penny stock for you.</p>
+            <p style="color: #999; font-style: italic;">– Gameleet, Watching You Do Nothing</p>
+        """,
+    },
+    {
+        "subject": "👀 The Algorithm is Getting Bored",
+        "html": """
+            <p><strong>Quick update:</strong></p>
+            <p>Your LeetCode profile looks suspiciously quiet today. Usually, people who want careers do things. You, however, seem to be trying a different strategy.</p>
+            <p>Solve the problem now, or prepare to explain to your future self why you own shares in a company that makes solar-powered flashlights.</p>
+            <p style="color: #999; font-style: italic;">– Gameleet, The Ghost in Your Machine</p>
+        """,
+    },
+    {
+        "subject": "📉 Impending Financial Doom Detected",
+        "html": """
+            <p><strong>Warning: High Risk of Stupidity</strong></p>
+            <p>Our sensors indicate you are currently choosing Netflix over Recursion. This is a statistically poor life choice.</p>
+            <p>You have a few hours left before we execute a trade that will make your brokerage account cry. Correct your course, Captain Indecisive.</p>
+            <p style="color: #999; font-style: italic;">– Gameleet, Your Financial Alarm Clock</p>
+        """,
+    },
+]
+
+def build_penalty_email(user_email: str):
     msg = random.choice(SARCASTIC_EMAILS)
     return {
         "from": "gamleet@alerts.valeron.me",
-        "to": "valerontoscano@gmail.com",
+        "to": user_email,
         "subject": msg["subject"],
         "html": f"""
         <html>
@@ -138,6 +168,31 @@ def build_penalty_email():
                     <p style="font-size: 13px; text-align: center; color: #999;">
                         This action was triggered by <strong>Gameleet</strong> because you ghosted your daily Leetcode commitment. 
                         <br>Fix your life before your portfolio fixes you.
+                    </p>
+                </div>
+            </body>
+        </html>
+        """,
+    }
+
+def build_nudge_email(user_email: str):
+    msg = random.choice(NUDGE_EMAILS)
+    return {
+        "from": "gamleet@alerts.valeron.me",
+        "to": user_email,
+        "subject": msg["subject"],
+        "html": f"""
+        <html>
+            <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; background-color: #f4f4f7; color: #333;">
+                <div style="max-width: 600px; margin: 40px auto; background-color: #fff; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 30px;">
+                    <h2 style="text-align: center; color: #2c3e50;">⏰ Reminder: The Market is Watching ⏰</h2>
+                    <div style="padding: 10px 0; font-size: 16px; line-height: 1.6;">
+                        {msg["html"]}
+                    </div>
+                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+                    <p style="font-size: 13px; text-align: center; color: #999;">
+                        You haven't completed your daily DSA goal yet. Penalty check happens at <strong>3:00 PM IST</strong>.
+                        <br>Don't let us buy garbage on your behalf.
                     </p>
                 </div>
             </body>

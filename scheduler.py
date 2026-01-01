@@ -2,7 +2,7 @@ import schedule
 import time
 from threading import Thread
 from helpers.leetcode import is_leetcode_solved_today
-from helpers.mails import build_penalty_email
+from helpers.mails import build_penalty_email, build_nudge_email
 from kite import generate_session
 from kiteconnect.exceptions import InputException
 from sqlalchemy.orm import Session
@@ -256,7 +256,11 @@ def execute_zerodha_penalty(user, db: Session):
             validity=kite_client.VALIDITY_DAY,
         )
         print(f"Penalty order placed for user {user.id}. Order ID: {order_id}")
-        resend.Emails.send(build_penalty_email())
+        if user.email and getattr(user, "email_notifications", 1):
+            try:
+                resend.Emails.send(build_penalty_email(user.email))
+            except Exception as mail_err:
+                print(f"Failed to send penalty email to {user.email}: {mail_err}")
     except InputException as e:
         if "Markets are closed right now." in str(e):
             try:
@@ -271,7 +275,11 @@ def execute_zerodha_penalty(user, db: Session):
                     validity=kite_client.VALIDITY_DAY,
                 )
                 print(f"Penalty AMO order placed for user {user.id}. Order ID: {order_id}")
-                resend.Emails.send(build_penalty_email())
+                if user.email and getattr(user, "email_notifications", 1):
+                    try:
+                        resend.Emails.send(build_penalty_email(user.email))
+                    except Exception as mail_err:
+                        print(f"Failed to send penalty email to {user.email}: {mail_err}")
             except Exception as ex:
                 print(f"Failed to place penalty AMO order for user {user.id}: {ex}")
     except Exception as e:
@@ -282,14 +290,33 @@ def daily_reset(db: Session):
     db.query(UserStat).update({UserStat.powerups_used_today: 0})
     db.commit()
 
+def send_nudge_reminders(db: Session):
+    print("Running pre-penalty nudges...")
+    users = db.query(User).all()
+    for user in users:
+        try:
+            # Check if they solved today
+            if not is_leetcode_solved_today(username=user.leetcode_username, session=user.leetcode_session):
+                if user.email and getattr(user, "email_notifications", 1):
+                    print(f"Nudging user {user.id} ({user.email})")
+                    resend.Emails.send(build_nudge_email(user.email))
+                else:
+                    print(f"User {user.id} has no email configured, skipping nudge.")
+        except Exception as e:
+            print(f"Error nudging user {user.id}: {e}")
+
 
 def schedule_daily_check(db):
     def job_wrapper():
         india_tz = pytz.timezone("Asia/Kolkata")
         now = datetime.now(india_tz)
-        if now.strftime("%H:%M") == "15:00":
+        current_time = now.strftime("%H:%M")
+        
+        if current_time == "11:00": # Nudge at 11 AM IST
+            send_nudge_reminders(db)
+        if current_time == "15:00": # Penalty at 3 PM IST
             check_all_users_dsa(db)
-        if now.strftime("%H:%M") == "00:00":
+        if current_time == "00:00": # Reset at Midnight
             daily_reset(db)
 
     schedule.every().minute.do(job_wrapper)

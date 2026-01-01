@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from dependencies import get_redis_client, get_current_user
 from models import UserStat, UserInventory, UserAchievement, Question
-from schemas.user_stats import UserStatsResponse, DifficultyUpdateRequest
+from schemas.user_stats import UserStatsResponse, DifficultyUpdateRequest, EmailPreferenceUpdate
 from schemas.inventory import InventoryResponse, InventoryItem, AchievementsResponse, Achievement, PowerupPurchaseRequest
 from schemas.user_leetcode import LeetCodeUpdate
 
@@ -98,6 +98,7 @@ async def sync_user_progress(
     stats.zerodha_connected = bool(user.zerodha_api_key)
     stats.allow_paid = user.allow_paid
     stats.risk_locked = bool(stats.risk_locked)
+    stats.email_notifications = bool(user.email_notifications)
 
     return stats
 
@@ -146,7 +147,29 @@ async def disconnect_zerodha(
         stats.difficulty_mode = "normal"
     
     db.commit()
+    db.commit()
     return {"message": "Zerodha account disconnected successfully"}
+
+@router.post("/disconnect-leetcode")
+async def disconnect_leetcode(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user.leetcode_username = None
+    user.leetcode_session = None
+    user.allow_paid = 0
+    db.commit()
+    return {"message": "LeetCode disconnected successfully"}
+
+@router.post("/integrations/email")
+async def update_email_preferences(
+    request: EmailPreferenceUpdate,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user.email_notifications = 1 if request.enabled else 0
+    db.commit()
+    return {"message": "Email preferences updated", "enabled": request.enabled}
 
 @router.post("/leetcode")
 async def update_leetcode_credentials(
