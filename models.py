@@ -30,6 +30,7 @@ class User(Base):
     
     # Preferences
     email_notifications = Column(Integer, default=1) # 0 = Off, 1 = On
+    has_completed_walkthrough = Column(Integer, default=0) # 0 = False, 1 = True
 
 
 class Question(Base):

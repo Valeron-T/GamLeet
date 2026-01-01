@@ -5,7 +5,7 @@ from typing import Optional
 
 class UserStatsResponse(BaseModel):
     lifetime_loss: Decimal
-    available_balance: Decimal
+    available_balance: Decimal = 0
     current_streak: int
     max_streak: int
     problems_solved: int
@@ -26,9 +26,10 @@ class UserStatsResponse(BaseModel):
     daily_risk_amount: int = 50
     risk_locked: bool = False
     email_notifications: bool = True
+    has_completed_walkthrough: bool = False
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class DifficultyUpdateRequest(BaseModel):
     difficulty_mode: str

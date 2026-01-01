@@ -99,8 +99,20 @@ async def sync_user_progress(
     stats.allow_paid = user.allow_paid
     stats.risk_locked = bool(stats.risk_locked)
     stats.email_notifications = bool(user.email_notifications)
+    stats.has_completed_walkthrough = bool(user.has_completed_walkthrough)
 
     return stats
+
+
+@router.post("/complete-walkthrough", response_model=UserStatsResponse)
+async def complete_walkthrough(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    redis = Depends(get_redis_client),
+):
+    user.has_completed_walkthrough = 1
+    db.commit()
+    return await get_user_stats(user, db, redis)
 
 
 @router.get("/login")
@@ -327,33 +339,38 @@ async def get_user_stats(
         db.commit()
         db.refresh(stats)
     
+    # Construct response explicitly to ensure all fields are populated correctly
+    # especially those that come from User model or external APIs
+    response = UserStatsResponse.from_orm(stats)
+    
     if user.name:
         parts = user.name.split()
         if len(parts) > 2:
-            stats.name = f"{parts[0]} {parts[-1]}"
+            response.name = f"{parts[0]} {parts[-1]}"
         else:
-            stats.name = user.name
+            response.name = user.name
     else:
-        stats.name = "User"
+        response.name = "User"
     
-    stats.email = user.email
+    response.email = user.email
+    response.email_notifications = True if user.email_notifications is None else bool(user.email_notifications)
 
     # Inject real-time balance from Redis/Zerodha
     if user.access_token:
         margins = await fetch_and_cache_margins(user, redis)
-        stats.available_balance = extract_wallet_balance(margins)
-        stats.zerodha_error = margins.get("error")
+        response.available_balance = extract_wallet_balance(margins)
+        response.zerodha_error = margins.get("error")
     else:
-        stats.available_balance = 0
-        stats.zerodha_error = "Zerodha not connected"
+        response.available_balance = 0
+        response.zerodha_error = "Zerodha not connected"
     
-    stats.leetcode_connected = bool(user.leetcode_session)
-    stats.leetcode_username = user.leetcode_username
-    stats.zerodha_connected = bool(user.zerodha_api_key)
-    stats.allow_paid = user.allow_paid
-    stats.risk_locked = bool(stats.risk_locked)
+    response.leetcode_connected = bool(user.leetcode_session)
+    response.leetcode_username = user.leetcode_username
+    response.zerodha_connected = bool(user.zerodha_api_key)
+    response.allow_paid = user.allow_paid
+    response.risk_locked = bool(stats.risk_locked)
 
-    return stats
+    return response
 
 @router.get("/margins")
 async def get_user_margins(

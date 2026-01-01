@@ -184,6 +184,7 @@ async def get_current_user_info(user: User = Depends(get_current_user)):
         "email": user.email,
         "name": user.name,
         "picture": user.picture,
-        "provider": user.oauth_provider
+        "provider": user.oauth_provider,
+        "has_completed_walkthrough": user.has_completed_walkthrough
     }
 
