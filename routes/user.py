@@ -6,7 +6,7 @@ from database import get_db
 from dependencies import get_redis_client, get_current_user
 from models import UserStat, UserInventory, UserAchievement, Question
 from schemas.user_stats import UserStatsResponse, DifficultyUpdateRequest
-from schemas.inventory import InventoryResponse, InventoryItem, AchievementsResponse, Achievement
+from schemas.inventory import InventoryResponse, InventoryItem, AchievementsResponse, Achievement, PowerupPurchaseRequest
 from schemas.user_leetcode import LeetCodeUpdate
 
 from security import decrypt_token, encrypt_token
@@ -409,3 +409,46 @@ def get_user_achievements(
         ))
     
     return AchievementsResponse(achievements=achievements)
+
+
+POWERUPS = {
+    "streak-freeze": {"name": "Streak Freeze", "cost": 150},
+    "penalty-shield": {"name": "Penalty Shield", "cost": 250},
+}
+
+@router.post("/purchase-powerup", response_model=UserStatsResponse)
+async def purchase_powerup(
+    request: PowerupPurchaseRequest,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    redis = Depends(get_redis_client),
+):
+    powerup_id = request.powerup_id
+    if powerup_id not in POWERUPS:
+        raise HTTPException(status_code=400, detail="Powerup not found or coming soon")
+        
+    powerup = POWERUPS[powerup_id]
+    stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
+    
+    if not stats or stats.gamcoins < powerup["cost"]:
+        raise HTTPException(status_code=400, detail="Insufficient GamCoins")
+        
+    # Deduct coins
+    stats.gamcoins -= powerup["cost"]
+    
+    # Add to inventory
+    inventory_item = db.query(UserInventory).filter(
+        UserInventory.user_id == user.id,
+        UserInventory.item_id == powerup_id
+    ).first()
+    
+    if inventory_item:
+        inventory_item.quantity += 1
+    else:
+        new_item = UserInventory(user_id=user.id, item_id=powerup_id, quantity=1)
+        db.add(new_item)
+        
+    db.commit()
+    
+    # Use existing get_user_stats logic
+    return await get_user_stats(user, db, redis)

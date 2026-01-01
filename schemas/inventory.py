@@ -27,3 +27,7 @@ class Achievement(BaseModel):
 
 class AchievementsResponse(BaseModel):
     achievements: List[Achievement]
+
+
+class PowerupPurchaseRequest(BaseModel):
+    powerup_id: str
