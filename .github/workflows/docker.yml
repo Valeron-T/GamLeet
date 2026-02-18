@@ -24,8 +24,14 @@ jobs:
       - name: Set image name
         run: echo "IMAGE_NAME=ghcr.io/valeron-t/gamleet" >> $GITHUB_ENV
 
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Build & push
         uses: docker/build-push-action@v5
         with:
+          context: .
+          file: ./Dockerfile
           push: true
           tags: ${{ env.IMAGE_NAME }}:latest
