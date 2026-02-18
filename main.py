@@ -120,7 +120,7 @@ async def zerodha_callback(
         httponly=True,
         secure=IS_PROD,
         samesite="lax",
-        domain=".valeron.me" if IS_PROD else None,
+        domain=os.getenv("COOKIE_DOMAIN") if IS_PROD else None,
         max_age=60 * 60 * 24,
     )
 
