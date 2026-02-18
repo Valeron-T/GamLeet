@@ -101,8 +101,8 @@ async def google_login(request: Request, response: Response, db: Session = Depen
             value=session_token,
             httponly=True,
             secure=IS_PROD,
-            samesite="lax",
-            # domain=os.getenv("COOKIE_DOMAIN") if IS_PROD else None,
+            samesite="none",
+            domain=os.getenv("COOKIE_DOMAIN") if IS_PROD else None,
             max_age=60 * 60 * 24 * 30, # 30 days
         )
         
@@ -161,8 +161,8 @@ async def dev_login(request: Request, response: Response, db: Session = Depends(
         value=session_token,
         httponly=True,
         secure=IS_PROD,
-        samesite="lax",
-        # domain=os.getenv("COOKIE_DOMAIN") if IS_PROD else None,
+        samesite="none",
+        domain=os.getenv("COOKIE_DOMAIN") if IS_PROD else None,
         max_age=60 * 60 * 24 * 30,
     )
     return {"message": "Dev Login successful", "user": {"email": user.email, "name": user.name}}
