@@ -894,8 +894,15 @@ async def _fetch_via_recent_ac(
 
 
 def recalculate_user_streak(user_id: int, db) -> int:
-    """Recalculate the user's current and max streaks based on LeetCode submissions cache."""
-    from models import LeetCodeSubmission, UserStat
+    """Recalculate the user's current and max streaks from overall solved history.
+
+    This uses both:
+    - QuestionCompletion timestamps (GamLeet/manual sync history)
+    - LeetCodeSubmission timestamps (raw LeetCode submission cache)
+
+    The union gives a fuller picture than only looking at GamLeet-synced rows.
+    """
+    from models import LeetCodeSubmission, QuestionCompletion, UserStat
     from datetime import datetime, timedelta
     import pytz
 
@@ -903,24 +910,40 @@ def recalculate_user_streak(user_id: int, db) -> int:
     if not stats:
         return 0
 
-    # Retrieve all submissions
+    tz = pytz.timezone("Asia/Kolkata")
+    solved_dates = set()
+
+    def add_local_date(dt):
+        if dt is None:
+            return
+        try:
+            if getattr(dt, "tzinfo", None) is None:
+                dt = pytz.utc.localize(dt)
+            solved_dates.add(dt.astimezone(tz).date())
+        except Exception:
+            return
+
     submissions = (
-        db.query(LeetCodeSubmission)
+        db.query(LeetCodeSubmission.timestamp)
         .filter(
             LeetCodeSubmission.user_id == user_id,
             LeetCodeSubmission.timestamp.isnot(None),
         )
         .all()
     )
-
-    tz = pytz.timezone("Asia/Kolkata")
-    solved_dates = set()
-    for sub in submissions:
+    for (timestamp,) in submissions:
         try:
-            dt = datetime.fromtimestamp(sub.timestamp, tz)
-            solved_dates.add(dt.date())
+            add_local_date(datetime.utcfromtimestamp(int(timestamp)))
         except Exception:
             continue
+
+    completions = (
+        db.query(QuestionCompletion.rewarded_at)
+        .filter(QuestionCompletion.user_id == user_id)
+        .all()
+    )
+    for (rewarded_at,) in completions:
+        add_local_date(rewarded_at)
 
     if not solved_dates:
         stats.current_streak = 0
@@ -946,9 +969,19 @@ def recalculate_user_streak(user_id: int, db) -> int:
         current_streak += 1
         check_date -= timedelta(days=1)
 
+    max_streak = 0
+    previous_date = None
+    running = 0
+    for solved_date in sorted(solved_dates):
+        if previous_date and solved_date == previous_date + timedelta(days=1):
+            running += 1
+        else:
+            running = 1
+        max_streak = max(max_streak, running)
+        previous_date = solved_date
+
     stats.current_streak = current_streak
-    if current_streak > stats.max_streak:
-        stats.max_streak = current_streak
+    stats.max_streak = max(stats.max_streak, max_streak)
 
     db.commit()
     return current_streak
