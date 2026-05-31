@@ -139,15 +139,9 @@ def check_dsa_completion(user: User, db: Session):
         from datetime import timedelta
         print(f"DSA solved today. Updating streak stats for user {user.id}")
         
-        # Streak increment logic
-        if stats.last_activity_date == today - timedelta(days=1):
-            stats.current_streak += 1
-        else:
-            # First time or broke streak
-            stats.current_streak = 1
-            
-        if stats.current_streak > stats.max_streak:
-            stats.max_streak = stats.current_streak
+        # Streak increment logic using submissions
+        from helpers.leetcode import recalculate_user_streak
+        recalculate_user_streak(user.id, db)
 
         stats.problems_solved += 1
         stats.problems_since_last_life += 1

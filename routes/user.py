@@ -1,19 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
 from dependencies import get_redis_client, get_current_user
-from models import UserStat, UserInventory, UserAchievement, Question
+from models import UserStat, UserInventory, UserAchievement, Question, QuestionCompletion, LeetCodeSubmission
 from schemas.user_stats import UserStatsResponse, DifficultyUpdateRequest, EmailPreferenceUpdate
 from schemas.inventory import InventoryResponse, InventoryItem, AchievementsResponse, Achievement, PowerupPurchaseRequest
 from schemas.user_leetcode import LeetCodeUpdate
+from schemas.stats import ActivityGraphResponse, DailyActivity
 
 from security import decrypt_token, encrypt_token
 from scheduler import check_all_users_dsa
 from schemas.zerodha import ZerodhaCredentialsUpdate
 from schemas.zerodha import ZerodhaCredentialsUpdate
 import json
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/user", tags=["User"])
 
@@ -339,6 +341,11 @@ async def get_user_stats(
         db.commit()
         db.refresh(stats)
     
+    # Recalculate streak based on cached submissions
+    from helpers.leetcode import recalculate_user_streak
+    recalculate_user_streak(user.id, db)
+    db.refresh(stats)
+    
     # Construct response explicitly to ensure all fields are populated correctly
     # especially those that come from User model or external APIs
     response = UserStatsResponse.from_orm(stats)
@@ -492,3 +499,65 @@ async def purchase_powerup(
     
     # Use existing get_user_stats logic
     return await get_user_stats(user, db, redis)
+
+
+@router.get("/stats/activity", response_model=ActivityGraphResponse)
+async def get_user_activity(
+    month: str | None = Query(None, description="Month to render in YYYY-MM format"),
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy.sql import func
+
+    stats = db.query(UserStat).filter(UserStat.user_id == user.id).first()
+
+    now = datetime.now(timezone.utc)
+    target = now
+    if month:
+        try:
+            year_str, month_str = month.split("-", 1)
+            target = datetime(int(year_str), int(month_str), 1, tzinfo=timezone.utc)
+        except Exception:
+            raise HTTPException(status_code=400, detail="month must be in YYYY-MM format")
+
+    month_start = datetime(target.year, target.month, 1, tzinfo=timezone.utc)
+    if target.month == 12:
+        next_month = datetime(target.year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        next_month = datetime(target.year, target.month + 1, 1, tzinfo=timezone.utc)
+
+    activity = []
+
+    leetcode_rows = db.query(LeetCodeSubmission).filter(
+        LeetCodeSubmission.user_id == user.id,
+        LeetCodeSubmission.timestamp.isnot(None),
+        LeetCodeSubmission.timestamp >= int(month_start.timestamp()),
+        LeetCodeSubmission.timestamp < int(next_month.timestamp()),
+    ).all()
+
+    if leetcode_rows:
+        counts: dict[str, int] = {}
+        for row in leetcode_rows:
+            submission_dt = datetime.fromtimestamp(int(row.timestamp), tz=timezone.utc)
+            date_key = submission_dt.date().isoformat()
+            counts[date_key] = counts.get(date_key, 0) + 1
+
+        activity = [DailyActivity(date=date, count=count) for date, count in sorted(counts.items())]
+    else:
+        activity_query = db.query(
+            func.date(QuestionCompletion.rewarded_at).label("date"),
+            func.count().label("count")
+        ).filter(
+            QuestionCompletion.user_id == user.id,
+            QuestionCompletion.rewarded_at >= month_start,
+            QuestionCompletion.rewarded_at < next_month,
+        ).group_by(
+            func.date(QuestionCompletion.rewarded_at)
+        ).all()
+
+        activity = [DailyActivity(date=str(row.date), count=row.count) for row in activity_query if row.date]
+
+    return ActivityGraphResponse(
+        activity=activity,
+        total_solved=stats.problems_solved if stats else 0
+    )

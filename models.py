@@ -1,5 +1,5 @@
 from database import Base
-from sqlalchemy import CHAR, DECIMAL, Column, Date, Integer, DateTime, VARCHAR, TEXT
+from sqlalchemy import CHAR, DECIMAL, Column, Date, Integer, DateTime, VARCHAR, TEXT, UniqueConstraint
 from sqlalchemy.sql import func
 import uuid
 
@@ -110,7 +110,24 @@ class QuestionCompletion(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False, index=True)
     question_id = Column(Integer, nullable=False, index=True)
+    source = Column(VARCHAR(20), default="sync", nullable=False)  # "sync" or "manual"
     rewarded_at = Column(DateTime, server_default=func.current_timestamp())
+
+
+class LeetCodeSubmission(Base):
+    __tablename__ = "leetcode_submissions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "submission_id", name="uq_user_leetcode_submission"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    submission_id = Column(VARCHAR(50), nullable=False, index=True)
+    title = Column(VARCHAR(255), nullable=True)
+    slug = Column(VARCHAR(100), nullable=True, index=True)
+    status = Column(VARCHAR(50), nullable=True)
+    timestamp = Column(Integer, nullable=True, index=True)
+    synced_at = Column(DateTime, server_default=func.current_timestamp(), nullable=False)
 
 
 class UserSession(Base):
