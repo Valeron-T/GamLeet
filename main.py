@@ -54,16 +54,8 @@ app.add_middleware(
 # Removed redundant get_db definition as it's now imported from database.py
 
 
-# Schedule the daily check at 11:59 PM with a DB connection
-def schedule_daily_check_with_db():
-    db = SessionLocal()
-    try:
-        schedule_daily_check(db)
-    finally:
-        db.close()
-
-
-schedule_daily_check_with_db()
+# Schedule the daily check
+schedule_daily_check()
 
 @app.get("/")
 async def root():

@@ -300,18 +300,26 @@ def send_nudge_reminders(db: Session):
             print(f"Error nudging user {user.id}: {e}")
 
 
-def schedule_daily_check(db):
+def schedule_daily_check():
     def job_wrapper():
         india_tz = pytz.timezone("Asia/Kolkata")
         now = datetime.now(india_tz)
         current_time = now.strftime("%H:%M")
         
-        if current_time == "11:00": # Nudge at 11 AM IST
-            send_nudge_reminders(db)
-        if current_time == "15:00": # Penalty at 3 PM IST
-            check_all_users_dsa(db)
-        if current_time == "00:00": # Reset at Midnight
-            daily_reset(db)
+        if current_time in ["11:00", "15:00", "00:00"]:
+            from database import SessionLocal
+            db = SessionLocal()
+            try:
+                if current_time == "11:00": # Nudge at 11 AM IST
+                    send_nudge_reminders(db)
+                elif current_time == "15:00": # Penalty at 3 PM IST
+                    check_all_users_dsa(db)
+                elif current_time == "00:00": # Reset at Midnight
+                    daily_reset(db)
+            except Exception as e:
+                print(f"Error executing scheduled job at {current_time}: {e}")
+            finally:
+                db.close()
 
     schedule.every().minute.do(job_wrapper)
 
