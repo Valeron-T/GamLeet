@@ -39,8 +39,6 @@ services:
   api:
     build: .
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     env_file:
       - .env
     environment:
@@ -52,6 +50,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - default
+      - sure_sure_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=sure_sure_net"
+      - "traefik.http.routers.gamleet.rule=Host(`gamleet-api.valeron.me`)"
+      - "traefik.http.routers.gamleet.entrypoints=websecure"
+      - "traefik.http.routers.gamleet.tls=true"
+      - "traefik.http.routers.gamleet.tls.certresolver=letsencrypt"
+      - "traefik.http.services.gamleet.loadbalancer.server.port=8000"
 
 volumes:
   postgres_data:
+
+networks:
+  sure_sure_net:
+    external: true
