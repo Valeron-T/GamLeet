@@ -170,19 +170,20 @@ async def load_leetcode_questions(db: Session = Depends(get_db)):
 
         new_objs = []
         for q in questions:
+            q_id = int(q["id"])
             q_data = {
-                "title": q["title"],
-                "slug": q["titleSlug"],
-                "acc_rate": q["acRate"],
-                "paid_only": q["paidOnly"],
-                "difficulty": q["difficulty"],
-                "topics": ", ".join(tag["name"] for tag in q.get("topicTags", [])),
+                "title": (q["title"] or "")[:100],
+                "slug": (q["titleSlug"] or "")[:100],
+                "acc_rate": str(q["acRate"])[:10] if q.get("acRate") is not None else None,
+                "paid_only": 1 if q.get("paidOnly") else 0,
+                "difficulty": (q["difficulty"] or "")[:100],
+                "topics": (", ".join(tag["name"] for tag in q.get("topicTags", [])))[:255],
             }
 
-            if q["id"] in existing_ids:
-                db.query(Question).filter_by(id=q["id"]).update(q_data)
+            if q_id in existing_ids:
+                db.query(Question).filter_by(id=q_id).update(q_data)
             else:
-                q_data["id"] = q["id"]
+                q_data["id"] = q_id
                 new_objs.append(Question(**q_data))
 
         if new_objs:
