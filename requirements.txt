@@ -1,7 +1,7 @@
 fastapi
 httpx
 kiteconnect
-pymysql
+psycopg2-binary
 python-dotenv
 pytz
 redis

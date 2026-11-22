@@ -31,7 +31,7 @@ GamLeet weaponizes your greed against your laziness.
 ## 🛠️ Tech Stack
 
 - **Framework**: Python (FastAPI)
-- **Database**: MySQL (via SQLAlchemy)
+- **Database**: PostgreSQL (via SQLAlchemy)
 - **Caching**: Redis (for session & stat caching)
 - **Broker Integration**: Zerodha Kite Connect API
 - **Email**: Resend API
@@ -54,7 +54,7 @@ GamLeet weaponizes your greed against your laziness.
 3. **Set up environment variables (`.env`)**
    ```env
    # Database & Redis
-   SQLALCHEMY_DATABASE_URL="mysql+pymysql://user:pass@host/db"
+   SQLALCHEMY_DATABASE_URL="postgresql+psycopg2://user:pass@host:5432/db"
    REDIS_CONN_STRING="redis://user:pass@host:port"
 
    # Zerodha Credentials

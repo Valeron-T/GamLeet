@@ -7,7 +7,7 @@ if os.getenv("ENVIRONMENT") != "production":
     load_dotenv()
 
 
-# Replace with your actual MySQL credentials
+# Replace with your actual PostgreSQL credentials
 SQLALCHEMY_DATABASE_URL = os.getenv("SQLALCHEMY_DATABASE_URL")
 
 engine = create_engine(

@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gamleet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gamleet}
+      POSTGRES_DB: ${POSTGRES_DB:-gamleet}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=32MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=16MB
+      - -c
+      - max_connections=20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gamleet} -d ${POSTGRES_DB:-gamleet}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "32mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    mem_limit: 48m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      SQLALCHEMY_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-gamleet}:${POSTGRES_PASSWORD:-gamleet}@db:5432/${POSTGRES_DB:-gamleet}
+      REDIS_CONN_STRING: redis://redis:6379/0
+    mem_limit: 192m
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
